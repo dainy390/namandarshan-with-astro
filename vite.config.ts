@@ -20,15 +20,15 @@ export default defineConfig(({ mode }) => ({
         // live
         // target: "http://52.66.103.126:5001",
         // local
-        target: "http://127.0.0.1:5001",
+        target: "https://namandarshan-astrotalk-testing-backend.onrender.com",
         changeOrigin: true,
       },
       "/sitemap.xml": {
-        target: "https://api.namandarshan.com",
+        target: "https://namandarshan-astrotalk-testing-backend.onrender.com",
         changeOrigin: true,
       },
       "/sitemap-": {
-        target: "https://api.namandarshan.com",
+        target: "https://namandarshan-astrotalk-testing-backend.onrender.com",
         changeOrigin: true,
       },
     },
