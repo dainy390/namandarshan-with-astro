@@ -4,31 +4,17 @@ const mongoose = require('mongoose');
 const { randomUUID } = require("crypto");
 const BookingSchema = require("../models/Booking.js");
 const WalletSchema = require('../models/Wallet');
+const PanditProfileSchema = require('../models/PanditProfile.js');
 const Booking = mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
 const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
+const PanditProfile =
+  mongoose.models.PanditProfile || mongoose.model('PanditProfile', PanditProfileSchema);
 
 const { createPaymentOrder, publicCheckoutOrder } = require("../services/payments.js");
 const { readAuthSession, recordWalletSpendForSession } = require("../middleware/auth.js");
 const { getWalletDebitAmount, shouldDebitWalletForBooking } = require("../utils/bookingBilling.js");
 
 const signalTypes = new Set(["ready", "offer", "answer", "candidate", "leave"]);
-const fallbackAstrologers = [
-  {
-    id: "1",
-    name: "Acharya Rahul",
-    modes: ["chat", "call"],
-    pricePerMinute: 13,
-    status: "online",
-  },
-  {
-    id: "2",
-    name: "Pandit Vivek",
-    modes: ["chat", "call"],
-    pricePerMinute: 15,
-    status: "online",
-  },
-];
-
 function createBookingId() {
   return `AST-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Date.now()
     .toString()
@@ -43,6 +29,24 @@ function normalizeDuration(value) {
 
 async function findAstrologer(req, astrologerId) {
   const id = String(astrologerId || "").trim();
+  if (!id) return null;
+
+  const profileLookup = [{ email: id.toLowerCase() }];
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    profileLookup.push({ _id: id }, { userId: id });
+  }
+
+  const profile = await PanditProfile.findOne({ $or: profileLookup }).lean();
+  if (profile) {
+    return {
+      id: String(profile.userId || profile._id),
+      name: profile.displayName,
+      modes: profile.modes?.length ? profile.modes : ["chat", "call"],
+      pricePerMinute: Number(profile.pricePerMinute || 0),
+      status: profile.status || "online",
+      avatar: profile.avatar || "",
+    };
+  }
 
   if (req.app.locals?.Astrologer) {
     const lookup = [{ id }, { publicId: id }];
@@ -63,7 +67,7 @@ async function findAstrologer(req, astrologerId) {
     }
   }
 
-  return fallbackAstrologers.find((astrologer) => astrologer.id === id) || null;
+  return null;
 }
 
 async function getAstrologerForSession(req, session) {
@@ -71,19 +75,6 @@ async function getAstrologerForSession(req, session) {
 
   const byId = await findAstrologer(req, session.id);
   if (byId) return byId;
-
-  if (session.email && req.app.locals?.Astrologer) {
-    const astrologer = await req.app.locals.Astrologer.findOne({ email: session.email }).lean();
-    if (astrologer) {
-      return {
-        id: String(astrologer.id || astrologer.publicId || astrologer._id),
-        name: astrologer.name,
-        modes: astrologer.modes?.length ? astrologer.modes : ["chat", "call"],
-        pricePerMinute: Number(astrologer.pricePerMinute || astrologer.price || 0),
-        status: astrologer.status || "online",
-      };
-    }
-  }
 
   return null;
 }
@@ -242,6 +233,10 @@ async function ensureWalletHasBalance(req, session, res) {
   return true;
 }
 
+function isMongoReady(req) {
+  return Boolean(req.app.locals.mongoReady) || mongoose.connection.readyState === 1;
+}
+
 async function saveBooking(req, booking) {
   booking.updatedAt = new Date();
 
@@ -261,7 +256,7 @@ async function syncExpiredSession(req, booking) {
     await saveBooking(req, booking);
   }
 
-  if (snapshot.status === "completed" && shouldDebitWalletForBooking(booking)) {
+  if (snapshot.status === "completed" && shouldDebitWalletForBooking(booking, sessionEndsAt(booking))) {
     await finalizeCompletedSession(req, booking);
   }
 
@@ -271,22 +266,23 @@ async function syncExpiredSession(req, booking) {
 async function finalizeCompletedSession(req, booking) {
   if (!booking) return null;
 
-  const debitAmount = getWalletDebitAmount(booking);
-  if (!shouldDebitWalletForBooking(booking)) {
+  const endedAt = toDate(booking.sessionEndsAt) || new Date();
+  const debitAmount = getWalletDebitAmount(booking, endedAt);
+  if (!shouldDebitWalletForBooking(booking, endedAt)) {
     return null;
   }
 
   try {
-    const wallet = await recordWalletSpendForSession(req, {
+    const spendResult = await recordWalletSpendForSession(req, {
       id: booking.customerId,
       email: booking.customerEmail,
       role: 'user'
     }, debitAmount);
 
-    booking.walletDebitedAmount = debitAmount;
+    booking.walletDebitedAmount = spendResult.amountDebited || debitAmount;
     booking.walletDebitedAt = new Date();
     await saveBooking(req, booking);
-    return wallet;
+    return spendResult;
   } catch (error) {
     console.error('[bookings] Failed to debit wallet for completed session:', error);
     return null;
@@ -398,6 +394,98 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+router.post("/wallet-session", async (req, res, next) => {
+  try {
+    const session = readAuthSession(req);
+
+    if (!session) {
+      return res.status(401).json({ message: "Sign in to start this consultation session." });
+    }
+
+    if (session.role !== "user") {
+      return res.status(403).json({ message: "Only devotee accounts can start wallet sessions." });
+    }
+
+    if (!isMongoReady(req)) {
+      return res.status(503).json({ message: "Consultation sessions are temporarily unavailable." });
+    }
+
+    const canProceed = await ensureWalletHasBalance(req, session, res);
+    if (!canProceed) {
+      return;
+    }
+
+    const { astrologerId, mode, name, concern, birthDate, birthTime, place, durationMinutes } =
+      req.body;
+    const consultationMode = String(mode || "").trim();
+
+    if (!astrologerId || !["chat", "call"].includes(consultationMode)) {
+      return res.status(400).json({ message: "Pandit and consultation mode are required." });
+    }
+
+    const astrologer = await findAstrologer(req, astrologerId);
+
+    if (!astrologer) {
+      return res.status(404).json({ message: "Pandit profile not found." });
+    }
+
+    if (astrologer.status === "offline") {
+      return res.status(400).json({ message: `${astrologer.name} is currently offline.` });
+    }
+
+    if (!astrologer.modes.includes(consultationMode)) {
+      return res
+        .status(400)
+        .json({ message: `${astrologer.name} is not available for ${consultationMode}.` });
+    }
+
+    const duration = normalizeDuration(durationMinutes);
+    const pricePerMinute = Number(astrologer.pricePerMinute || 0);
+    const bookingFee = pricePerMinute * duration;
+
+    if (bookingFee <= 0) {
+      return res.status(400).json({ message: "Unable to calculate consultation fees." });
+    }
+
+    const startedAt = new Date();
+    const booking = await Booking.create({
+      bookingId: createBookingId(),
+      astrologerId: astrologer.id,
+      astrologerName: astrologer.name,
+      customerId: session.id,
+      customerEmail: session.email,
+      customerName: String(name || session.name || "").trim() || "Devotee",
+      concern: String(concern || `Live ${consultationMode} consultation`).trim(),
+      mode: consultationMode,
+      durationMinutes: duration,
+      bookingFee,
+      pricePerMinute,
+      amountPaid: 0,
+      currency: process.env.RAZORPAY_CURRENCY || "INR",
+      paymentStatus: "wallet_pending",
+      birthDate,
+      birthTime,
+      place,
+      etaMinutes: 0,
+      status: "active",
+      sessionStartedAt: startedAt,
+      sessionEndsAt: new Date(startedAt.getTime() + duration * 60 * 1000)
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Consultation session started.",
+      booking: toSerializableBooking(booking),
+      bookingId: booking.bookingId,
+      roomId: booking.bookingId,
+      durationSeconds: duration * 60,
+      session: sessionSnapshot(booking)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get("/:bookingId/session", async (req, res, next) => {
   try {
     const booking = await findBooking(req, req.params.bookingId);
@@ -437,12 +525,15 @@ router.post("/finalize", async (req, res, next) => {
     if (!participant) return;
 
     ensureSessionFields(booking);
-    booking.sessionEndsAt = booking.sessionEndsAt || new Date();
+    if (booking.status !== "completed" || !booking.sessionEndsAt) {
+      booking.sessionEndsAt = new Date();
+    }
     booking.status = "completed";
     await saveBooking(req, booking);
 
-    const wallet = await finalizeCompletedSession(req, booking);
-    const debitAmount = booking.walletDebitedAmount || getWalletDebitAmount(booking);
+    const spendResult = await finalizeCompletedSession(req, booking);
+    const debitAmount =
+      booking.walletDebitedAmount || getWalletDebitAmount(booking, toDate(booking.sessionEndsAt) || new Date());
 
     res.json({
       message: "Consultation session finalized.",
@@ -450,7 +541,8 @@ router.post("/finalize", async (req, res, next) => {
       debitAmount,
       walletDebitedAmount: booking.walletDebitedAmount || null,
       walletDebitedAt: booking.walletDebitedAt || null,
-      wallet
+      amountDebited: spendResult?.amountDebited || booking.walletDebitedAmount || null,
+      wallet: spendResult?.wallet || spendResult || null
     });
   } catch (error) {
     next(error);
@@ -469,12 +561,15 @@ router.post("/:bookingId/finalize", async (req, res, next) => {
     if (!participant) return;
 
     ensureSessionFields(booking);
-    booking.sessionEndsAt = booking.sessionEndsAt || new Date();
+    if (booking.status !== "completed" || !booking.sessionEndsAt) {
+      booking.sessionEndsAt = new Date();
+    }
     booking.status = "completed";
     await saveBooking(req, booking);
 
-    const wallet = await finalizeCompletedSession(req, booking);
-    const debitAmount = booking.walletDebitedAmount || getWalletDebitAmount(booking);
+    const spendResult = await finalizeCompletedSession(req, booking);
+    const debitAmount =
+      booking.walletDebitedAmount || getWalletDebitAmount(booking, toDate(booking.sessionEndsAt) || new Date());
 
     res.json({
       message: "Consultation session finalized.",
@@ -482,7 +577,8 @@ router.post("/:bookingId/finalize", async (req, res, next) => {
       debitAmount,
       walletDebitedAmount: booking.walletDebitedAmount || null,
       walletDebitedAt: booking.walletDebitedAt || null,
-      wallet
+      amountDebited: spendResult?.amountDebited || booking.walletDebitedAmount || null,
+      wallet: spendResult?.wallet || spendResult || null
     });
   } catch (error) {
     next(error);

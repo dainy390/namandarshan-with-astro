@@ -1210,6 +1210,7 @@ const AstroChat = React.lazy( //chat
   () => import("./pages/AstroChat")
 );
 const PanditDashboard = React.lazy(() => import("./pages/PanditDashboard"));
+const DevoteeDashboard = React.lazy(() => import("./pages/DevoteeDashboard"));
 
 const App = () => {
   const AMPLIFY_URL = "https://main.d2j2dgxrbts39r.amplifyapp.com";
@@ -1500,6 +1501,7 @@ const App = () => {
                           element={<LiveDarshanDetail />}
                         />
                         <Route path="/my-trips" element={<MyTrips />} />
+                        <Route path="/devotee-dashboard" element={<DevoteeDashboard />} />
                         <Route path="/login" element={<Login />} />
                         <Route
                           path="/reset-password/:token"

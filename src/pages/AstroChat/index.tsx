@@ -1,28 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Header from "@/components/layout/Header";
-import Footer from "@/components/layout/Footer";
-import SessionTimer from "@/components/session/SessionTimer";
 import RechargeModal from "@/components/astrologer/RechargeModal";
+import SessionTimer from "@/components/session/sessionTimer";
+import { useAuth } from "@/context/AuthContext";
 import { useSocket } from "@/context/SocketContext";
 import { useWallet } from "@/context/WalletContext";
-import { useAuth } from "@/context/AuthContext";
 import { canStartConsultation } from "@/utils/consultationAccess";
-import { getApiUrl } from "@/utils/api";
+import {
+  finalizeWalletConsultationSession,
+  startWalletConsultationSession,
+} from "@/utils/consultationSession";
 import { toast } from "sonner";
-
-/**
- * Backend socket contract expected by this page (rename here if Arnab's
- * event names differ - nothing else needs to change):
- *
- *  emit  "chat:join"     { roomId, astrologerId }
- *  emit  "chat:message"  { roomId, text }
- *  emit  "chat:leave"    { roomId }
- *  emit  "chat:feedback" { roomId, astrologerId, rating, comment }
- *
- *  on    "chat:message"  { id, sender: "user"|"astro", text, time }
- *  on    "chat:typing"   { sender }
- */
 
 interface ChatMessage {
   id: string | number;
@@ -31,31 +20,38 @@ interface ChatMessage {
   time: string;
 }
 
-const DEFAULT_SESSION_SECONDS = 300; // 5 min
+const DEFAULT_SESSION_SECONDS = 300;
+const DEFAULT_AVATAR = "/assets/pandit-assistant.png";
 
 const AstroChat = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { socket, isConnected } = useSocket();
   const { user } = useAuth();
-  const { balance } = useWallet();
+  const { balance, isLoading: isWalletLoading, refreshBalance } = useWallet();
   const hasWalletBalance = canStartConsultation(balance);
+  const isPandit = ["pandit", "astrologer"].includes(user?.role || "");
 
-  // Astrologer + room comes from navigation state (set by AstrologerCard / booking flow).
-  // Falls back to a demo astrologer if the page is opened directly.
-  const astrologer = location.state?.astrologer || {
-    id: "demo-astrologer",
-    name: "Pandit Rahul Sharma",
-    avatar: "https://i.pravatar.cc/100?img=12",
-  };
-  const roomId = location.state?.roomId || `room-${astrologer.id}-${user?._id || "guest"}`;
-  const sessionSeconds = location.state?.durationSeconds || DEFAULT_SESSION_SECONDS;
+  const astrologer = useMemo(() => {
+    const stateAstrologer = location.state?.astrologer || {};
+    return {
+      id: String(stateAstrologer.id || stateAstrologer.userId || ""),
+      name: stateAstrologer.name || stateAstrologer.displayName || "Pandit",
+      avatar: stateAstrologer.avatar || stateAstrologer.image || DEFAULT_AVATAR,
+      image: stateAstrologer.image || stateAstrologer.avatar || DEFAULT_AVATAR,
+    };
+  }, [location.state?.astrologer]);
 
+  const routeBookingId = String(location.state?.bookingId || "");
+  const initialSessionSeconds = Number(location.state?.durationSeconds || DEFAULT_SESSION_SECONDS);
+  const [activeBookingId, setActiveBookingId] = useState(routeBookingId);
+  const [effectiveSessionSeconds, setEffectiveSessionSeconds] = useState(initialSessionSeconds);
+  const [isStartingSession, setIsStartingSession] = useState(!routeBookingId && !isPandit);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
       sender: "astro",
-      text: "Namaste 🙏 Welcome to Namandarshan.",
+      text: "Namaste. Welcome to your Naman Darshan consultation.",
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     },
   ]);
@@ -65,11 +61,105 @@ const AstroChat = () => {
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const activeBookingIdRef = useRef(routeBookingId);
   const hasFinalizedRef = useRef(false);
 
-  // Join the chat room on mount, leave it on unmount
+  const roomId =
+    location.state?.roomId ||
+    activeBookingId ||
+    `room-${astrologer.id || "pandit"}-${user?._id || "guest"}`;
+  const senderRole: "user" | "astro" = isPandit ? "astro" : "user";
+
   useEffect(() => {
-    if (!hasWalletBalance) {
+    activeBookingIdRef.current = activeBookingId;
+  }, [activeBookingId]);
+
+  const finalizeSession = useCallback(async () => {
+    if (isPandit || hasFinalizedRef.current) return;
+
+    const bookingId = activeBookingIdRef.current;
+    if (!bookingId) return;
+
+    hasFinalizedRef.current = true;
+
+    try {
+      await finalizeWalletConsultationSession(bookingId);
+      await refreshBalance();
+    } catch (error) {
+      console.error("[AstroChat] Failed to finalize consultation:", error);
+    }
+  }, [isPandit, refreshBalance]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const startSession = async () => {
+      if (isPandit || activeBookingIdRef.current) {
+        setIsStartingSession(false);
+        return;
+      }
+
+      if (isWalletLoading) return;
+
+      if (!hasWalletBalance) {
+        toast.error("Add money to your wallet to start this consultation.");
+        navigate("/wallet", { replace: true });
+        return;
+      }
+
+      if (!astrologer.id) {
+        toast.error("Select a pandit to start a consultation.");
+        navigate("/devotee-dashboard", { replace: true });
+        return;
+      }
+
+      setIsStartingSession(true);
+
+      try {
+        const started = await startWalletConsultationSession({
+          pandit: { id: astrologer.id, name: astrologer.name },
+          mode: "chat",
+          durationSeconds: initialSessionSeconds,
+        });
+
+        if (cancelled) {
+          finalizeWalletConsultationSession(started.bookingId).catch((error) => {
+            console.error("[AstroChat] Failed to clean up abandoned session:", error);
+          });
+          return;
+        }
+
+        activeBookingIdRef.current = started.bookingId;
+        setActiveBookingId(started.bookingId);
+        setEffectiveSessionSeconds(started.durationSeconds);
+      } catch (error: any) {
+        toast.error(error?.message || "Unable to start consultation.");
+        navigate("/devotee-dashboard", { replace: true });
+      } finally {
+        if (!cancelled) setIsStartingSession(false);
+      }
+    };
+
+    startSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    astrologer.id,
+    astrologer.name,
+    activeBookingId,
+    hasWalletBalance,
+    initialSessionSeconds,
+    isPandit,
+    isWalletLoading,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    if (isStartingSession) return;
+
+    if (!isPandit && !hasWalletBalance) {
       toast.error("Add money to your wallet to start this consultation.");
       navigate("/wallet", { replace: true });
       return;
@@ -81,9 +171,17 @@ const AstroChat = () => {
     return () => {
       socket.emit("chat:leave", { roomId });
     };
-  }, [socket, isConnected, roomId, astrologer.id, hasWalletBalance, navigate]);
+  }, [
+    astrologer.id,
+    hasWalletBalance,
+    isConnected,
+    isPandit,
+    isStartingSession,
+    navigate,
+    roomId,
+    socket,
+  ]);
 
-  // Listen for incoming messages from the astrologer
   useEffect(() => {
     if (!socket) return;
 
@@ -97,14 +195,23 @@ const AstroChat = () => {
     };
   }, [socket]);
 
-  // Auto scroll to latest message
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    return () => {
+      void finalizeSession();
+    };
+  }, [finalizeSession]);
+
   const sendMessage = () => {
-    if (!hasWalletBalance) {
-      toast.error("Add money to your wallet to continue this consultation.");
+    if (isStartingSession || !roomId) {
+      toast.message("Starting your consultation...");
+      return;
+    }
+
+    if (!isPandit && !hasWalletBalance) {
       setShowRecharge(true);
       return;
     }
@@ -113,56 +220,21 @@ const AstroChat = () => {
 
     const outgoing: ChatMessage = {
       id: Date.now(),
-      sender: "user",
-      text: message,
+      sender: senderRole,
+      text: message.trim(),
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
-    // Optimistic UI update
     setMessages((prev) => [...prev, outgoing]);
-    socket?.emit("chat:message", { roomId, text: message });
+    socket?.emit("chat:message", { roomId, text: outgoing.text, sender: senderRole });
     setMessage("");
   };
-
-  const finalizeSession = useCallback(async () => {
-    if (hasFinalizedRef.current) return;
-    hasFinalizedRef.current = true;
-
-    const token = localStorage.getItem("userToken");
-    if (!token) return;
-
-    try {
-      const response = await fetch(getApiUrl("/api/bookings/finalize"), {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        console.error("[AstroChat] Failed to finalize consultation:", data?.message || response.statusText);
-      }
-    } catch (error) {
-      console.error("[AstroChat] Failed to finalize consultation:", error);
-    }
-  }, []);
 
   const handleExpire = useCallback(() => {
     setSessionEnded(true);
     finalizeSession();
     toast.error("Your session has ended.");
   }, [finalizeSession]);
-
-  const handleRequestContinue = useCallback(() => {
-    if (balance > 0) {
-      // In a full implementation this would extend the session server-side
-      // (e.g. socket.emit("chat:extend", { roomId })) and reset the timer.
-      toast.success("Continuing session...");
-    } else {
-      setShowRecharge(true);
-    }
-  }, [balance]);
 
   const submitFeedback = () => {
     socket?.emit("chat:feedback", {
@@ -172,69 +244,72 @@ const AstroChat = () => {
       comment: feedbackComment,
     });
     toast.success("Thanks for your feedback!");
-    navigate("/astro");
+    navigate("/devotee-dashboard");
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="h-[100dvh] overflow-hidden bg-gray-100">
       <Header />
 
-      <div className="container mx-auto px-5 pt-44 pb-10">
-        <div className="max-w-5xl mx-auto">
-          {/* Top Bar */}
-          <div className="bg-white rounded-t-xl border shadow-sm p-4 flex justify-between items-center">
-            <div className="flex items-center gap-3">
+      <main className="container mx-auto flex h-full flex-col px-3 pb-3 pt-[calc(var(--header-height,176px)+0.75rem)] sm:px-5">
+        <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col">
+          <div className="flex shrink-0 flex-col gap-3 rounded-t-xl border bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-4">
+            <div className="flex min-w-0 items-center gap-3">
               <img
                 src={astrologer.avatar}
                 alt={astrologer.name}
-                className="w-12 h-12 rounded-full"
+                className="h-10 w-10 shrink-0 rounded-full object-cover sm:h-12 sm:w-12"
               />
-              <div>
-                <h2 className="font-bold text-lg">{astrologer.name}</h2>
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-bold sm:text-lg">{astrologer.name}</h2>
                 <p className={`text-sm ${isConnected ? "text-green-600" : "text-gray-400"}`}>
-                  ● {isConnected ? "Online" : "Connecting..."}
+                  {isConnected ? "Online" : "Connecting..."}
                 </p>
               </div>
             </div>
 
-            <div className="flex gap-3">
-              <div
-                onClick={() => navigate("/wallet")}
-                className="bg-green-50 px-4 py-2 rounded-lg border cursor-pointer hover:bg-green-100"
-              >
-                <p className="text-xs text-gray-500">Wallet</p>
-                <p className="font-bold text-green-600">₹{balance}</p>
-              </div>
+            <div className="flex flex-wrap gap-2 sm:gap-3">
+              {!isPandit && (
+                <div
+                  onClick={() => navigate("/wallet")}
+                  className="min-w-[96px] cursor-pointer rounded-lg border bg-green-50 px-3 py-2 hover:bg-green-100 sm:min-w-[116px] sm:px-4"
+                >
+                  <p className="text-xs text-gray-500">Wallet</p>
+                  <p className="font-bold text-green-600">Rs. {balance}</p>
+                </div>
+              )}
 
-              {!sessionEnded && (
-                <SessionTimer
-                  astrologerId={astrologer.id}
-                  initialSeconds={sessionSeconds}
-                  onExpire={handleExpire}
-                  onRequestContinue={handleRequestContinue}
-                />
+              {!sessionEnded && !isPandit && (
+                isStartingSession ? (
+                  <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-2 text-orange-600">
+                    <p className="text-xs text-gray-500">Session</p>
+                    <p className="font-bold">Starting...</p>
+                  </div>
+                ) : (
+                  <SessionTimer
+                    astrologerId={astrologer.id}
+                    initialSeconds={effectiveSessionSeconds}
+                    onExpire={handleExpire}
+                    onRequestContinue={() => setShowRecharge(true)}
+                  />
+                )
               )}
             </div>
           </div>
 
-          {/* Chat Area */}
-          <div ref={scrollRef} className="bg-white border-x h-[600px] overflow-y-auto p-5 space-y-4">
+          <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto border-x bg-white p-3 sm:p-5">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex ${msg.sender === senderRole ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[75%] px-4 py-3 rounded-2xl ${
-                    msg.sender === "user" ? "bg-orange-500 text-white" : "bg-gray-100"
+                  className={`max-w-[75%] rounded-2xl px-4 py-3 ${
+                    msg.sender === "user" ? "bg-orange-500 text-white" : "bg-gray-100 text-slate-900"
                   }`}
                 >
                   <p>{msg.text}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      msg.sender === "user" ? "text-orange-100" : "text-gray-500"
-                    }`}
-                  >
+                  <p className={`mt-1 text-xs ${msg.sender === "user" ? "text-orange-100" : "text-gray-500"}`}>
                     {msg.time}
                   </p>
                 </div>
@@ -242,91 +317,78 @@ const AstroChat = () => {
             ))}
           </div>
 
-          {/* Bottom Input / Session Ended state */}
-          {sessionEnded ? (
-            <div className="bg-white rounded-b-xl border p-6 text-center space-y-4">
-              <p className="font-semibold text-gray-700">
-                Your session has ended. Add money to continue chatting.
-              </p>
+          {sessionEnded && !isPandit ? (
+            <div className="shrink-0 space-y-3 rounded-b-xl border bg-white p-4 text-center sm:space-y-4 sm:p-5">
+              <p className="font-semibold text-gray-700">Your session has ended.</p>
               <button
+                type="button"
                 onClick={() => setShowRecharge(true)}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-xl font-medium"
+                className="rounded-xl bg-orange-500 px-6 py-3 font-medium text-white hover:bg-orange-600"
               >
                 Add Money
               </button>
 
-              <div className="pt-4 border-t">
-                <p className="font-medium mb-2">How was your consultation?</p>
-                <div className="flex justify-center gap-1 mb-3">
+              <div className="border-t pt-4">
+                <p className="mb-2 font-medium">How was your consultation?</p>
+                <div className="mb-3 flex justify-center gap-1">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
+                      type="button"
                       onClick={() => setFeedbackRating(star)}
-                      className={`text-2xl ${
-                        star <= feedbackRating ? "text-orange-500" : "text-gray-300"
-                      }`}
+                      className={`text-2xl ${star <= feedbackRating ? "text-orange-500" : "text-gray-300"}`}
                       aria-label={`${star} star`}
                     >
-                      ★
+                      *
                     </button>
                   ))}
                 </div>
                 <textarea
                   value={feedbackComment}
-                  onChange={(e) => setFeedbackComment(e.target.value)}
+                  onChange={(event) => setFeedbackComment(event.target.value)}
                   placeholder="Share your experience (optional)"
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  rows={2}
+                  className="w-full rounded-lg border px-3 py-2 text-sm"
+                  rows={1}
                 />
                 <button
+                  type="button"
                   onClick={submitFeedback}
                   disabled={feedbackRating === 0}
-                  className="mt-3 w-full bg-gray-800 hover:bg-gray-900 disabled:opacity-40 text-white py-2 rounded-lg font-medium"
+                  className="mt-3 w-full rounded-lg bg-gray-800 py-2 font-medium text-white hover:bg-gray-900 disabled:opacity-40"
                 >
                   Submit Feedback
                 </button>
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-b-xl border p-4">
-              <div className="flex gap-3">
+            <div className="shrink-0 rounded-b-xl border bg-white p-3 sm:p-4">
+              <div className="flex gap-2 sm:gap-3">
                 <input
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+                  onChange={(event) => setMessage(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && sendMessage()}
                   placeholder="Type your message..."
-                  className="flex-1 border rounded-xl px-4 py-3 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-xl border px-4 py-3 focus:outline-none"
                 />
                 <button
+                  type="button"
                   onClick={sendMessage}
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 rounded-xl font-medium"
+                  className="rounded-xl bg-orange-500 px-4 font-medium text-white hover:bg-orange-600 sm:px-6"
                 >
                   Send
-                </button>
-              </div>
-
-              <div className="flex justify-between mt-3">
-                <p className="text-xs text-gray-500">Messages are secure and private</p>
-                <button
-                  onClick={() => setShowRecharge(true)}
-                  className="text-orange-500 text-sm font-medium hover:underline"
-                >
-                  Recharge Wallet
                 </button>
               </div>
             </div>
           )}
         </div>
-      </div>
+      </main>
 
       {showRecharge && (
         <RechargeModal
           onClose={() => setShowRecharge(false)}
-          reasonMessage={sessionEnded ? "Add money to continue your consultation." : undefined}
+          reasonMessage="Add money to continue your consultation."
         />
       )}
-
-      <Footer />
     </div>
   );
 };

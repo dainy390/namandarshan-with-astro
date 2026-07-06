@@ -10,5 +10,5 @@ export const getPostAuthPath = ({
   if (redirectUrl) return decodeURIComponent(redirectUrl);
   if (role === 'pandit' || role === 'astrologer') return '/pandit-dashboard';
   if (from && from !== '/') return from;
-  return '/my-trips';
+  return '/devotee-dashboard';
 };

@@ -26,7 +26,7 @@ interface AuthContextType {
     // New Advanced Auth Methods
     sendOtp: (email: string) => Promise<{ success: boolean, message?: string }>;
     verifyOtp: (email: string, otp: string) => Promise<{ success: boolean, message?: string }>;
-    socialLogin: (provider: string, email: string, name: string, socialId: string) => Promise<{ success: boolean, message?: string }>;
+    socialLogin: (provider: string, email: string, name: string, socialId: string, role?: string) => Promise<{ success: boolean, message?: string }>;
     updateUserProfile: (updates: Partial<User>) => Promise<{ success: boolean, message?: string }>;
 }
 

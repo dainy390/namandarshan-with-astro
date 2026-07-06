@@ -33,6 +33,95 @@ app.set("io", io);
 io.on("connection", (socket) => {
     console.log(`[Socket.io] Client connected: ${socket.id}`);
 
+    socket.on("chat:join", ({ roomId }) => {
+        if (!roomId) return;
+        socket.join(roomId);
+    });
+
+    socket.on("chat:leave", ({ roomId }) => {
+        if (!roomId) return;
+        socket.leave(roomId);
+    });
+
+    socket.on("chat:message", ({ roomId, text, sender }) => {
+        if (!roomId || !String(text || "").trim()) return;
+        socket.to(roomId).emit("chat:message", {
+            id: `${Date.now()}-${socket.id}`,
+            sender: sender === "astro" ? "astro" : "user",
+            text: String(text).trim(),
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        });
+    });
+
+    socket.on("chat:feedback", (payload) => {
+        if (payload?.roomId) {
+            socket.to(payload.roomId).emit("chat:feedback", payload);
+        }
+    });
+
+    socket.on("call:join", ({ roomId, bookingId, role, name }) => {
+        if (!roomId) return;
+        socket.join(roomId);
+        socket.to(roomId).emit("call:peer-joined", {
+            from: socket.id,
+            roomId,
+            bookingId,
+            role,
+            name,
+        });
+    });
+
+    socket.on("call:leave", ({ roomId, role, name }) => {
+        if (!roomId) return;
+        socket.to(roomId).emit("call:peer-left", {
+            from: socket.id,
+            roomId,
+            role,
+            name,
+        });
+        socket.leave(roomId);
+    });
+
+    socket.on("call:offer", ({ roomId, description }) => {
+        if (!roomId || !description) return;
+        socket.to(roomId).emit("call:offer", {
+            from: socket.id,
+            description,
+        });
+    });
+
+    socket.on("call:answer", ({ roomId, description }) => {
+        if (!roomId || !description) return;
+        socket.to(roomId).emit("call:answer", {
+            from: socket.id,
+            description,
+        });
+    });
+
+    socket.on("call:ice-candidate", ({ roomId, candidate }) => {
+        if (!roomId || !candidate) return;
+        socket.to(roomId).emit("call:ice-candidate", {
+            from: socket.id,
+            candidate,
+        });
+    });
+
+    socket.on("call:end", ({ roomId }) => {
+        if (!roomId) return;
+        socket.to(roomId).emit("call:end", {
+            from: socket.id,
+            roomId,
+        });
+    });
+
+    socket.on("astrologer:lock", (payload) => {
+        socket.broadcast.emit("astrologer:lock", payload);
+    });
+
+    socket.on("astrologer:unlock", (payload) => {
+        socket.broadcast.emit("astrologer:unlock", payload);
+    });
+
     socket.on("accept_lead", async (data) => {
         try {
             const { leadId, agentName, agentId } = data;

@@ -37,10 +37,10 @@ function getWalletDebitAmount(booking, endedAt = new Date()) {
   return calculateWalletDebitAmount(booking, endedAt);
 }
 
-function shouldDebitWalletForBooking(booking) {
+function shouldDebitWalletForBooking(booking, endedAt = new Date()) {
   if (!booking) return false;
   if (booking.walletDebitedAt) return false;
-  return getWalletDebitAmount(booking) > 0;
+  return getWalletDebitAmount(booking, endedAt) > 0;
 }
 
 module.exports = {

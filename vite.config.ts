@@ -32,6 +32,7 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
       },
     },
+    allowedHosts: ["596e-223-223-151-239.ngrok-free.app"],
   },
 
   plugins: [react()].filter(Boolean),

@@ -1,311 +1,291 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import AstrologerCard from "../../components/astrologer/AstrologerCard";
-import { astrologers } from "../../data/astrologers";
-import ZegoCall from "./ZegoCall";
-// import Header from "@/components/layout/Header";
-import AstroCallHeader from "@/components/layout/AstroCallHeader"
-import Footer from "@/components/layout/Footer";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+
+import AstrologerCard from "@/components/astrologer/AstrologerCard";
 import LoginModal from "@/components/Astro-auth/LoginModal";
 import SignupModal from "@/components/Astro-auth/SignupModal";
-import { User, ChevronDown, LogOut } from "lucide-react";
+import AstroCallHeader from "@/components/layout/AstroCallHeader";
+import Footer from "@/components/layout/Footer";
 import { useAuth } from "@/context/AuthContext";
 import { useWallet } from "@/context/WalletContext";
 import { canStartConsultation } from "@/utils/consultationAccess";
+import {
+  fetchPanditProfiles,
+  PanditProfile,
+  startWalletConsultationSession,
+} from "@/utils/consultationSession";
+import WebRTCCall from "./WebRTCCall";
+
+const DEFAULT_DURATION_SECONDS = 300;
 
 export default function AstroCall() {
   const navigate = useNavigate();
-
-  const [selectedAstrologer, setSelectedAstrologer] = useState<any>(null);
+  const location = useLocation();
+  const { isUserAuthenticated } = useAuth();
+  const { balance, isLoading: isWalletLoading } = useWallet();
+  const hasWalletBalance = canStartConsultation(balance);
+  const [pandits, setPandits] = useState<PanditProfile[]>([]);
+  const [selectedCall, setSelectedCall] = useState<{
+    bookingId: string;
+    roomId: string;
+    durationSeconds: number;
+  } | null>(
+    location.state?.bookingId
+      ? {
+          bookingId: location.state.bookingId,
+          roomId: location.state.roomId || location.state.bookingId,
+          durationSeconds: Number(location.state.durationSeconds || DEFAULT_DURATION_SECONDS),
+        }
+      : null
+  );
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
+  const [showLogin, setShowLogin] = useState(false);
+  const [showSignup, setShowSignup] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"chat" | "call" | null>(null);
+  const [pendingPandit, setPendingPandit] = useState<PanditProfile | null>(null);
+  const [isLoadingPandits, setIsLoadingPandits] = useState(true);
+  const [isStartingId, setIsStartingId] = useState<string | null>(null);
 
-const [showLogin, setShowLogin] = useState(false);
-const [showSignup, setShowSignup] = useState(false);
-
-const [pendingAction, setPendingAction] = useState<
-  "chat" | "call" | null
->(null);
-
-const [pendingAstrologer, setPendingAstrologer] =
-  useState<any>(null);
-
-
-
-
-const { isUserAuthenticated, user, logoutUser } = useAuth();
-const { balance } = useWallet();
-const hasWalletBalance = canStartConsultation(balance);
-
-const handleLoginSuccess = () => {
-  setShowLogin(false);
-
-  if (pendingAction === "call") {
-    if (!hasWalletBalance) {
-      navigate("/wallet");
-    } else {
-      setSelectedAstrologer(pendingAstrologer);
+  const loadPandits = useCallback(async () => {
+    setIsLoadingPandits(true);
+    try {
+      setPandits(await fetchPanditProfiles());
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to load pandits.");
+      setPandits([]);
+    } finally {
+      setIsLoadingPandits(false);
     }
-  }
+  }, []);
 
-  if (pendingAction === "chat") {
+  useEffect(() => {
+    loadPandits();
+  }, [loadPandits]);
+
+  const filteredPandits = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return pandits.filter((pandit) => {
+      const matchesSearch =
+        !query ||
+        [pandit.name, pandit.expertise, ...(pandit.languages || [])]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+
+      const matchesFilter =
+        activeFilter === "All" ||
+        (pandit.expertise || "").toLowerCase().includes(activeFilter.toLowerCase());
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [activeFilter, pandits, search]);
+
+  const requireAccess = (pandit: PanditProfile, action: "chat" | "call") => {
+    if (!isUserAuthenticated) {
+      setPendingAction(action);
+      setPendingPandit(pandit);
+      setShowLogin(true);
+      return false;
+    }
+
+    if (isWalletLoading) return false;
+
     if (!hasWalletBalance) {
       navigate("/wallet");
-    } else {
-      navigate("/astro-chat", {
-        state: {
-          astrologer: { ...pendingAstrologer, avatar: pendingAstrologer?.image },
-        },
+      return false;
+    }
+
+    return true;
+  };
+
+  const startSession = async (pandit: PanditProfile, mode: "chat" | "call") => {
+    if (!requireAccess(pandit, mode)) return;
+
+    setIsStartingId(`${pandit.id}-${mode}`);
+
+    try {
+      const started = await startWalletConsultationSession({
+        pandit,
+        mode,
+        durationSeconds: DEFAULT_DURATION_SECONDS,
       });
+      const astrologer = {
+        ...pandit,
+        avatar: pandit.avatar || pandit.image || "/assets/pandit-assistant.png",
+        image: pandit.image || pandit.avatar || "/assets/pandit-assistant.png",
+        price: pandit.pricePerMinute || pandit.price || 0,
+      };
+
+      if (mode === "chat") {
+        navigate("/astro-chat", {
+          state: {
+            astrologer,
+            bookingId: started.bookingId,
+            roomId: started.bookingId,
+            durationSeconds: started.durationSeconds,
+          },
+        });
+        return;
+      }
+
+      setSelectedCall({
+        bookingId: started.bookingId,
+        roomId: started.bookingId,
+        durationSeconds: started.durationSeconds,
+      });
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to start consultation.");
+    } finally {
+      setIsStartingId(null);
     }
-  }
+  };
 
-  setPendingAction(null);
-};
+  const handleLoginSuccess = () => {
+    setShowLogin(false);
 
+    if (pendingPandit && pendingAction) {
+      void startSession(pendingPandit, pendingAction);
+    } else {
+      navigate("/devotee-dashboard");
+    }
 
+    setPendingAction(null);
+    setPendingPandit(null);
+  };
 
+  const handleSignupSuccess = () => {
+    setShowSignup(false);
 
-const [showProfileMenu, setShowProfileMenu] = useState(false);
+    if (pendingPandit && pendingAction) {
+      void startSession(pendingPandit, pendingAction);
+    } else {
+      navigate("/devotee-dashboard");
+    }
 
-const handleLogout = () => {
-  logoutUser();
-  setShowProfileMenu(false);
-};
+    setPendingAction(null);
+    setPendingPandit(null);
+  };
 
-
-
-
-// `user` from useAuth() is the real, backend-authenticated profile.
-// Kept as `astroUser` alias below so the rest of this file (JSX) needn't change.
-const astroUser = user;
-
-
-
-  if (selectedAstrologer) {
-    return <ZegoCall />;
-  }
-
-  const filteredAstrologers = astrologers.filter((astro) => {
-  const matchesSearch =
-    astro.name.toLowerCase().includes(search.toLowerCase()) ||
-    astro.expertise?.toLowerCase().includes(search.toLowerCase());
-
-  const matchesFilter =
-    activeFilter === "All" ||
-    astro.expertise?.toLowerCase().includes(
-      activeFilter.toLowerCase()
+  if (selectedCall) {
+    return (
+      <WebRTCCall
+        bookingId={selectedCall.bookingId}
+        roomId={selectedCall.roomId}
+        sessionSeconds={selectedCall.durationSeconds}
+      />
     );
+  }
 
-  return matchesSearch && matchesFilter;
-});
+  const filterOptions = ["All", "Vedic", "Numerology", "Tarot", "Puja"];
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* <Header /> */}
+      <AstroCallHeader
+        onChatClick={() => {
+          if (filteredPandits[0]) void startSession(filteredPandits[0], "chat");
+        }}
+        onCallClick={() => {
+          if (filteredPandits[0]) void startSession(filteredPandits[0], "call");
+        }}
+        onLoginClick={() => setShowLogin(true)}
+      />
 
+      <div className="container mx-auto px-4 pb-20 pt-8">
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h1 className="text-4xl font-bold">Talk To Pandits</h1>
+            <p className="mt-2 text-slate-600">Profiles are managed from the pandit dashboard.</p>
+          </div>
+          {isUserAuthenticated && (
+            <div
+              className="min-w-[190px] cursor-pointer rounded-xl border bg-white px-4 py-3 shadow-md transition hover:shadow-lg"
+              onClick={() => navigate("/wallet")}
+            >
+              <p className="text-xs text-gray-500">Wallet Balance</p>
+              <span className="text-lg font-bold text-green-600">Rs. {balance}</span>
+            </div>
+          )}
+        </div>
 
-<AstroCallHeader
-  onChatClick={() => {
-    if (!isUserAuthenticated) {
-      setPendingAction("chat");
-      setPendingAstrologer(filteredAstrologers[0]);
-      setShowLogin(true);
-      return;
-    }
-
-    if (!hasWalletBalance) {
-      navigate("/wallet");
-      return;
-    }
-
-    navigate("/astro-chat", {
-      state: {
-        astrologer: {
-          ...filteredAstrologers[0],
-          avatar: filteredAstrologers[0].image,
-        },
-      },
-    });
-  }}
-  onCallClick={() => {
-    if (!isUserAuthenticated) {
-      setPendingAction("call");
-      setPendingAstrologer(filteredAstrologers[0]);
-      setShowLogin(true);
-      return;
-    }
-
-    if (!hasWalletBalance) {
-      navigate("/wallet");
-      return;
-    }
-
-    setSelectedAstrologer(filteredAstrologers[0]);
-  }}
-  onLoginClick={() => setShowLogin(true)}
-/>
-
-      
-<div className="container mx-auto px-4 pt-8 pb-20">
-        <h1 className="text-4xl font-bold mb-6">
-          Talk To Astrologers
-        </h1>
-
-        {/* Search + Wallet */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row">
           <input
             type="text"
-            placeholder="Search Astrologers..."
+            placeholder="Search pandits..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1 border p-3 rounded-lg bg-white"
+            onChange={(event) => setSearch(event.target.value)}
+            className="flex-1 rounded-lg border bg-white p-3"
           />
+        </div>
 
-         {isUserAuthenticated && (
-         <div className="flex items-center gap-3">
-
-  {/* Wallet */}
-  <div
-    className="bg-white shadow-md rounded-xl border px-4 py-3 min-w-[190px] cursor-pointer hover:shadow-lg transition"
-    onClick={() => navigate("/wallet")}
-  >
-    <p className="text-xs text-gray-500">
-      Wallet Balance
-    </p>
-
-    <div className="flex items-center justify-between mt-1">
-      <span className="text-green-600 font-bold text-lg">
-        ₹{balance}
-      </span>
-
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          navigate("/wallet");
-        }}
-        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm"
-      >
-        Recharge
-      </button>
-    </div>
-  </div>
-
-</div>
-        )}
-</div>  
-       {/* Filters */}
-<div className="flex gap-3 mb-8 flex-wrap">
-
-  <button
-    onClick={() => setActiveFilter("All")}
-    className={`px-4 py-2 rounded ${
-      activeFilter === "All"
-        ? "bg-orange-500 text-white"
-        : "border bg-white"
-    }`}
-  >
-    All
-  </button>
-
-  <button
-    onClick={() => setActiveFilter("Vedic")}
-    className={`px-4 py-2 rounded ${
-      activeFilter === "Vedic"
-        ? "bg-orange-500 text-white"
-        : "border bg-white"
-    }`}
-  >
-    Vedic
-  </button>
-
-  <button
-    onClick={() => setActiveFilter("Numerology")}
-    className={`px-4 py-2 rounded ${
-      activeFilter === "Numerology"
-        ? "bg-orange-500 text-white"
-        : "border bg-white"
-    }`}
-  >
-    Numerology
-  </button>
-
-  <button
-    onClick={() => setActiveFilter("Tarot")}
-    className={`px-4 py-2 rounded ${
-      activeFilter === "Tarot"
-        ? "bg-orange-500 text-white"
-        : "border bg-white"
-    }`}
-  >
-    Tarot
-  </button>
-
-</div>
-
-        {/* Astrologers */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredAstrologers.map((astro) => (
-          <AstrologerCard
-  key={astro.id}
-  astrologer={astro}
-
-  
-  onCall={() => {
-    if (!isUserAuthenticated) {
-      setPendingAction("call");
-      setPendingAstrologer(astro);
-      setShowLogin(true);
-      return;
-    }
-
-    if (!hasWalletBalance) {
-      navigate("/wallet");
-      return;
-    }
-
-    setSelectedAstrologer(astro);
-  }}
-  onChat={() => {
-    if (!isUserAuthenticated) {
-      setPendingAction("chat");
-      setPendingAstrologer(astro);
-      setShowLogin(true);
-      return;
-    }
-
-    if (!hasWalletBalance) {
-      navigate("/wallet");
-      return;
-    }
-
-    navigate("/astro-chat", {
-      state: { astrologer: { ...astro, avatar: astro.image } },
-    });
-  }}
-/>
+        <div className="mb-8 flex flex-wrap gap-3">
+          {filterOptions.map((filter) => (
+            <button
+              key={filter}
+              type="button"
+              onClick={() => setActiveFilter(filter)}
+              className={`rounded px-4 py-2 ${
+                activeFilter === filter ? "bg-orange-500 text-white" : "border bg-white"
+              }`}
+            >
+              {filter}
+            </button>
           ))}
         </div>
+
+        {isLoadingPandits ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((item) => (
+              <div key={item} className="h-96 animate-pulse rounded-2xl border bg-white" />
+            ))}
+          </div>
+        ) : filteredPandits.length ? (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredPandits.map((pandit) => (
+              <AstrologerCard
+                key={pandit.id}
+                astrologer={{
+                  ...pandit,
+                  image: pandit.image || pandit.avatar || "/assets/pandit-assistant.png",
+                  price: pandit.pricePerMinute || pandit.price || 0,
+                  experience: pandit.experience || `${pandit.experienceYears || 0} Years`,
+                  rating: pandit.rating || 5,
+                }}
+                onCall={() => startSession(pandit, "call")}
+                onChat={() => startSession(pandit, "chat")}
+                isStartingCall={isStartingId === `${pandit.id}-call`}
+                isStartingChat={isStartingId === `${pandit.id}-chat`}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center">
+            <p className="text-lg font-semibold">No pandit profiles found.</p>
+            <p className="mt-2 text-sm text-slate-500">Ask pandits to save their profile from the pandit dashboard.</p>
+          </div>
+        )}
       </div>
 
-<LoginModal
-  isOpen={showLogin}
-  onClose={() => setShowLogin(false)}
-  onLoginSuccess={handleLoginSuccess}
-  onSignup={() => {
-    setShowLogin(false);
-    setShowSignup(true);
-  }}
-/>
+      <LoginModal
+        isOpen={showLogin}
+        onClose={() => setShowLogin(false)}
+        onLoginSuccess={handleLoginSuccess}
+        onSignup={() => {
+          setShowLogin(false);
+          setShowSignup(true);
+        }}
+      />
 
-<SignupModal
-  isOpen={showSignup}
-  onClose={() => setShowSignup(false)}
-  onBackToLogin={() => {
-    setShowSignup(false);
-    setShowLogin(true);
-  }}
-/>
-
+      <SignupModal
+        isOpen={showSignup}
+        onClose={() => setShowSignup(false)}
+        onBackToLogin={() => {
+          setShowSignup(false);
+          setShowLogin(true);
+        }}
+        onSignupSuccess={handleSignupSuccess}
+      />
 
       <Footer />
     </div>

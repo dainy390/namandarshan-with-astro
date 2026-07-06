@@ -1,134 +1,94 @@
-import React from "react";
+const AstrologerCard = ({ astrologer, onCall, onChat }: any) => {
+  const canChat = !astrologer.modes || astrologer.modes.includes("chat");
+  const canCall = !astrologer.modes || astrologer.modes.includes("call");
+  const image = astrologer.image || astrologer.avatar || "/assets/pandit-assistant.png";
+  const price = astrologer.pricePerMinute || astrologer.price || 0;
+  const status = astrologer.status || "online";
 
-const AstrologerCard = ({
-  astrologer,
-  onCall,
-  onChat,
-}: any) => {
   return (
-    <div className="relative bg-white rounded-2xl border shadow-sm hover:shadow-xl transition-all duration-300 p-5">
-
-      {/* Online Badge */}
-      <div className="absolute top-4 right-4 bg-green-500 text-white text-xs font-medium px-3 py-1 rounded-full">
-        Online
+    <div className="relative rounded-2xl border bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-xl">
+      <div className={`absolute right-4 top-4 rounded-full px-3 py-1 text-xs font-medium text-white ${
+        status === "busy" ? "bg-amber-500" : status === "offline" ? "bg-slate-500" : "bg-green-500"
+      }`}>
+        {status}
       </div>
 
-      {/* Verified Badge */}
-      <div className="absolute top-4 left-4 bg-blue-500 text-white text-xs font-medium px-3 py-1 rounded-full">
+      <div className="absolute left-4 top-4 rounded-full bg-blue-500 px-3 py-1 text-xs font-medium text-white">
         Verified
       </div>
 
-      {/* Profile */}
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center pt-5">
         <img
-          src={astrologer.image}
+          src={image}
           alt={astrologer.name}
-          className="w-24 h-24 rounded-full object-cover border-4 border-orange-100"
+          className="h-24 w-24 rounded-full border-4 border-orange-100 object-cover"
         />
 
-        <h3 className="text-xl font-bold mt-4 text-center">
-          {astrologer.name}
-        </h3>
+        <h3 className="mt-4 text-center text-xl font-bold">{astrologer.name}</h3>
 
-        <div className="flex items-center gap-1 mt-1">
-          ⭐
-          <span className="font-medium">
-            {astrologer.rating}
-          </span>
+        <div className="mt-1 flex items-center gap-1">
+          <span className="text-amber-500">*</span>
+          <span className="font-medium">{astrologer.rating || 5}</span>
         </div>
       </div>
 
-      {/* Details */}
       <div className="mt-4 space-y-2 text-gray-700">
-
-        <div className="flex justify-between">
-          <span className="text-gray-500">
-            Experience
-          </span>
-
-          <span className="font-medium">
-            {astrologer.experience}
-          </span>
+        <div className="flex justify-between gap-3">
+          <span className="text-gray-500">Experience</span>
+          <span className="font-medium">{astrologer.experience || `${astrologer.experienceYears || 0} Years`}</span>
         </div>
 
-        <div className="flex justify-between">
-          <span className="text-gray-500">
-            Expertise
-          </span>
-
-          <span className="font-medium">
-            {astrologer.expertise}
-          </span>
+        <div className="flex justify-between gap-3">
+          <span className="text-gray-500">Expertise</span>
+          <span className="text-right font-medium">{astrologer.expertise || "Spiritual Guidance"}</span>
         </div>
 
         <div>
-          <p className="text-gray-500 mb-2">
-            Languages
-          </p>
-
+          <p className="mb-2 text-gray-500">Languages</p>
           <div className="flex flex-wrap gap-2">
-            {astrologer.languages?.map(
-              (lang: string, index: number) => (
-                <span
-                  key={index}
-                  className="bg-orange-50 text-orange-600 text-xs px-2 py-1 rounded-full"
-                >
-                  {lang}
-                </span>
-              )
-            )}
+            {(astrologer.languages || []).map((lang: string) => (
+              <span key={lang} className="rounded-full bg-orange-50 px-2 py-1 text-xs text-orange-600">
+                {lang}
+              </span>
+            ))}
           </div>
         </div>
-
       </div>
 
-      {/* Price */}
       <div className="mt-5 flex items-center justify-between border-t pt-4">
-
         <div>
-          <p className="text-xs text-gray-500">
-            Consultation Fee
-          </p>
-
+          <p className="text-xs text-gray-500">Consultation Fee</p>
           <p className="text-2xl font-bold text-orange-500">
-            ₹{astrologer.price}
-            <span className="text-sm text-gray-500 font-normal">
-              /min
-            </span>
+            Rs. {price}
+            <span className="text-sm font-normal text-gray-500">/min</span>
           </p>
         </div>
 
         <div className="text-right">
-          <p className="text-xs text-gray-500">
-            Status
-          </p>
-
-          <p className="text-green-600 font-semibold">
-            Available
-          </p>
+          <p className="text-xs text-gray-500">Status</p>
+          <p className="font-semibold capitalize text-green-600">{status === "offline" ? "Offline" : "Available"}</p>
         </div>
-
       </div>
 
-      {/* Buttons */}
-      <div className="grid grid-cols-2 gap-3 mt-5">
-
+      <div className="mt-5 grid grid-cols-2 gap-3">
         <button
+          type="button"
           onClick={() => onChat(astrologer)}
-          className="bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-medium transition"
+          disabled={!canChat || status === "offline"}
+          className="rounded-xl bg-green-600 py-3 font-medium text-white transition hover:bg-green-700 disabled:bg-gray-300"
         >
           Chat Now
         </button>
 
         <button
+          type="button"
           onClick={() => onCall(astrologer)}
-          className="bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-medium transition"
+          disabled={!canCall || status === "offline"}
+          className="rounded-xl bg-orange-500 py-3 font-medium text-white transition hover:bg-orange-600 disabled:bg-gray-300"
         >
           Call Now
         </button>
-
       </div>
-
     </div>
   );
 };

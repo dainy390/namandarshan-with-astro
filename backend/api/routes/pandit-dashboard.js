@@ -1,10 +1,13 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const BookingSchema = require("../models/Booking.js");
+const PanditProfileSchema = require("../models/PanditProfile.js");
 const { readAuthSession } = require("../middleware/auth.js");
 
 const router = express.Router();
 const Booking = mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
+const PanditProfile =
+  mongoose.models.PanditProfile || mongoose.model("PanditProfile", PanditProfileSchema);
 
 const RANGE_DAYS = {
   "7d": 7,
@@ -29,6 +32,181 @@ function asDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
+
+function normalizeCsvList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeModes(value) {
+  const modes = normalizeCsvList(value).filter((mode) => ["chat", "call"].includes(mode));
+  return modes.length ? Array.from(new Set(modes)) : ["chat", "call"];
+}
+
+function serializePanditProfile(profile) {
+  if (!profile) return null;
+  const item = typeof profile?.toObject === "function" ? profile.toObject() : profile;
+  const id = String(item.userId || item._id || "");
+  const displayName = item.displayName || "Pandit";
+
+  return {
+    id,
+    profileId: String(item._id || ""),
+    userId: item.userId ? String(item.userId) : null,
+    email: item.email || "",
+    name: displayName,
+    displayName,
+    expertise: item.expertise || "",
+    bio: item.bio || "",
+    languages: item.languages || [],
+    modes: item.modes?.length ? item.modes : ["chat", "call"],
+    price: asNumber(item.pricePerMinute),
+    pricePerMinute: asNumber(item.pricePerMinute),
+    experience: `${asNumber(item.experienceYears)} Years`,
+    experienceYears: asNumber(item.experienceYears),
+    status: item.status || "online",
+    image: item.avatar || "",
+    avatar: item.avatar || "",
+    rating: asNumber(item.rating) || 5,
+    isActive: item.isActive !== false,
+    createdAt: item.createdAt?.toISOString?.() || item.createdAt || null,
+    updatedAt: item.updatedAt?.toISOString?.() || item.updatedAt || null,
+  };
+}
+
+function requirePanditSession(req, res) {
+  const session = readAuthSession(req);
+  if (!session) {
+    res.status(401).json({ success: false, message: "Sign in as a pandit to continue." });
+    return null;
+  }
+
+  if (!["pandit", "astrologer"].includes(String(session.role || "").toLowerCase())) {
+    res.status(403).json({ success: false, message: "Only pandit accounts can manage pandit profiles." });
+    return null;
+  }
+
+  return session;
+}
+
+router.get("/pandits", async (req, res, next) => {
+  try {
+    if (!req.app.locals.mongoReady && mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: "Database is not connected. Please try again shortly.",
+      });
+    }
+
+    const includeInactive = String(req.query.includeInactive || "") === "true";
+    const match = includeInactive ? {} : { isActive: true, status: { $ne: "offline" } };
+    const profiles = await PanditProfile.find(match)
+      .sort({ status: 1, updatedAt: -1, displayName: 1 })
+      .lean();
+
+    res.json({
+      success: true,
+      pandits: profiles.map(serializePanditProfile),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/profile", async (req, res, next) => {
+  try {
+    const session = requirePanditSession(req, res);
+    if (!session) return;
+
+    const profile = await PanditProfile.findOne({
+      $or: [{ userId: session.id }, { email: session.email }],
+    }).lean();
+
+    res.json({
+      success: true,
+      profile: serializePanditProfile(profile) || {
+        id: String(session.id || ""),
+        userId: String(session.id || ""),
+        email: session.email || "",
+        name: session.name || "",
+        displayName: session.name || "",
+        expertise: "",
+        bio: "",
+        languages: [],
+        modes: ["chat", "call"],
+        price: 13,
+        pricePerMinute: 13,
+        experience: "0 Years",
+        experienceYears: 0,
+        status: "online",
+        image: "",
+        avatar: "",
+        rating: 5,
+        isActive: true,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/profile", async (req, res, next) => {
+  try {
+    const session = requirePanditSession(req, res);
+    if (!session) return;
+
+    const pricePerMinute = Number(req.body.pricePerMinute ?? req.body.price);
+    const experienceYears = Number(req.body.experienceYears);
+    const rating = Number(req.body.rating);
+    const status = ["online", "busy", "offline"].includes(req.body.status)
+      ? req.body.status
+      : "online";
+
+    const update = {
+      userId: session.id,
+      email: session.email,
+      displayName: String(req.body.displayName || req.body.name || session.name || "").trim(),
+      expertise: String(req.body.expertise || "").trim(),
+      bio: String(req.body.bio || "").trim(),
+      languages: normalizeCsvList(req.body.languages),
+      modes: normalizeModes(req.body.modes),
+      pricePerMinute: Number.isFinite(pricePerMinute) && pricePerMinute > 0 ? pricePerMinute : 13,
+      experienceYears: Number.isFinite(experienceYears) && experienceYears >= 0 ? experienceYears : 0,
+      status,
+      avatar: String(req.body.avatar || req.body.image || "").trim(),
+      rating: Number.isFinite(rating) ? Math.min(5, Math.max(0, rating)) : 5,
+      isActive: req.body.isActive !== false,
+    };
+
+    if (!update.displayName) {
+      return res.status(400).json({ success: false, message: "Display name is required." });
+    }
+
+    if (!update.expertise) {
+      return res.status(400).json({ success: false, message: "Expertise is required." });
+    }
+
+    const profile = await PanditProfile.findOneAndUpdate(
+      { userId: session.id },
+      { $set: update },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.json({
+      success: true,
+      message: "Pandit profile saved.",
+      profile: serializePanditProfile(profile),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 function getRangeStart(range) {
   const days = RANGE_DAYS[range];

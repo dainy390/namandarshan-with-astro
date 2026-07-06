@@ -18,6 +18,7 @@ import {
   BookOpen,
   Zap,
   Gamepad2,
+  LayoutDashboard,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { getApiUrl } from "@/utils/api";
@@ -33,7 +34,7 @@ const MyTrips = () => {
     if (isLoading) return; // Wait for auth check to complete
 
     if (!isUserAuthenticated) {
-      navigate("/login");
+      navigate(`/login?redirect=${encodeURIComponent("/my-trips")}`);
       return;
     }
 
@@ -145,9 +146,17 @@ const MyTrips = () => {
               Welcome back, {user?.name || "Devotee"}!
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <Link to="/devotee-dashboard" className="flex-1">
+              <Button variant="outline" className="w-full gap-2 font-medium">
+                <LayoutDashboard className="w-4 h-4" />
+                Devotee Dashboard
+              </Button>
+            </Link>
+
             <Link to={`/booking`} className="flex-1">
-              <Button variant="outline" className="w-full font-medium">
+              <Button variant="outline" className="w-full gap-2 font-medium">
+                <ShoppingBag className="w-4 h-4" />
                 View My Package
               </Button>
             </Link>

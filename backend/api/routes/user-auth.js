@@ -88,6 +88,7 @@ router.post('/login', async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
+    const requestedRole = normalizeRole(req.body.role);
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
@@ -98,13 +99,33 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    const passwordMatch = await bcrypt.compare(password, user.password);
+    let shouldSaveUser = false;
+    let passwordMatch = false;
+
+    try {
+      passwordMatch = await bcrypt.compare(password, user.password);
+    } catch (compareError) {
+      passwordMatch = false;
+    }
+
+    const storedPassword = String(user.password || '');
+    const isBcryptHash = storedPassword.startsWith('$2');
+    if (!passwordMatch && !isBcryptHash && user.authProvider === 'local' && storedPassword === password) {
+      user.password = await bcrypt.hash(password, 10);
+      passwordMatch = true;
+      shouldSaveUser = true;
+    }
+
     if (!passwordMatch) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    if (user.role !== role && role === 'pandit') {
+    if (user.role !== requestedRole && requestedRole === 'pandit') {
       user.role = 'pandit';
+      shouldSaveUser = true;
+    }
+
+    if (shouldSaveUser) {
       await user.save();
     }
 

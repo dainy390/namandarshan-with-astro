@@ -11,11 +11,15 @@ import {
   RefreshCw,
   Search,
   LogOut,
+  Save,
+  UserRound,
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { getApiUrl, readJsonResponse } from "@/utils/api";
 import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
 
 type RangeOption = "7d" | "30d" | "90d" | "all";
 
@@ -61,6 +65,31 @@ interface RecentBooking {
   bookedAt: string | null;
 }
 
+interface PanditProfile {
+  id: string;
+  userId?: string | null;
+  name: string;
+  displayName?: string;
+  email?: string;
+  expertise?: string;
+  bio?: string;
+  languages?: string[];
+  modes?: Array<"chat" | "call">;
+  pricePerMinute?: number;
+  experienceYears?: number;
+  status?: "online" | "busy" | "offline";
+  avatar?: string;
+  image?: string;
+  rating?: number;
+  isActive?: boolean;
+}
+
+interface ProfileResponse {
+  success: boolean;
+  message?: string;
+  profile: PanditProfile;
+}
+
 interface PanditDashboardResponse {
   success: boolean;
   message?: string;
@@ -103,6 +132,20 @@ const emptyMode: ModeSummary = {
   bookings: 0,
   minutes: 0,
   earnings: 0,
+};
+
+const emptyProfileForm = {
+  displayName: "",
+  expertise: "",
+  bio: "",
+  languages: "",
+  modes: ["chat", "call"] as Array<"chat" | "call">,
+  pricePerMinute: "13",
+  experienceYears: "0",
+  status: "online" as "online" | "busy" | "offline",
+  avatar: "",
+  rating: "5",
+  isActive: true,
 };
 
 const currency = new Intl.NumberFormat("en-IN", {
@@ -191,8 +234,12 @@ const PanditDashboard = () => {
   const panditId = searchParams.get("panditId")?.trim() || "";
   const [panditIdDraft, setPanditIdDraft] = useState(panditId);
   const [data, setData] = useState<PanditDashboardResponse | null>(null);
+  const [profile, setProfile] = useState<PanditProfile | null>(null);
+  const [profileForm, setProfileForm] = useState(emptyProfileForm);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, isUserAuthenticated, isLoading: authLoading, logoutUser } = useAuth();
 
@@ -242,6 +289,41 @@ const PanditDashboard = () => {
     }
   }, [panditId, range]);
 
+  const loadProfile = useCallback(async () => {
+    const token = localStorage.getItem("userToken");
+    if (!token) return;
+
+    try {
+      const response = await fetch(getApiUrl("/api/pandit-dashboard/profile"), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await readJsonResponse<ProfileResponse>(response);
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || "Unable to load profile.");
+      }
+
+      const nextProfile = payload.profile;
+      setProfile(nextProfile);
+      setProfileForm({
+        displayName: nextProfile.displayName || nextProfile.name || "",
+        expertise: nextProfile.expertise || "",
+        bio: nextProfile.bio || "",
+        languages: (nextProfile.languages || []).join(", "),
+        modes: nextProfile.modes?.length ? nextProfile.modes : ["chat", "call"],
+        pricePerMinute: String(nextProfile.pricePerMinute || 13),
+        experienceYears: String(nextProfile.experienceYears || 0),
+        status: nextProfile.status || "online",
+        avatar: nextProfile.avatar || nextProfile.image || "",
+        rating: String(nextProfile.rating || 5),
+        isActive: nextProfile.isActive !== false,
+      });
+      setProfileError(null);
+    } catch (loadError: any) {
+      setProfileError(loadError?.message || "Unable to load profile.");
+    }
+  }, []);
+
   useEffect(() => {
     if (!authLoading && !isUserAuthenticated) {
       navigate('/login?mode=login&role=pandit&redirect=%2Fpandit-dashboard', { replace: true });
@@ -254,7 +336,8 @@ const PanditDashboard = () => {
     }
 
     loadDashboard();
-  }, [authLoading, isUserAuthenticated, loadDashboard, navigate, user]);
+    loadProfile();
+  }, [authLoading, isUserAuthenticated, loadDashboard, loadProfile, navigate, user]);
 
   const totals = data?.totals || emptyTotals;
   const byMode = data?.byMode || { call: emptyMode, chat: emptyMode };
@@ -272,6 +355,90 @@ const PanditDashboard = () => {
   const handleLogout = () => {
     logoutUser();
     navigate("/", { replace: true });
+  };
+
+  const updateProfileField = (field: keyof typeof emptyProfileForm, value: any) => {
+    setProfileForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleProfileMode = (mode: "chat" | "call") => {
+    setProfileForm((prev) => {
+      const nextModes = prev.modes.includes(mode)
+        ? prev.modes.filter((item) => item !== mode)
+        : [...prev.modes, mode];
+
+      return { ...prev, modes: nextModes.length ? nextModes : [mode] };
+    });
+  };
+
+  const saveProfile = async (event: FormEvent) => {
+    event.preventDefault();
+    const token = localStorage.getItem("userToken");
+    if (!token) return;
+
+    setIsSavingProfile(true);
+    setProfileError(null);
+
+    try {
+      const response = await fetch(getApiUrl("/api/pandit-dashboard/profile"), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...profileForm,
+          pricePerMinute: Number(profileForm.pricePerMinute),
+          experienceYears: Number(profileForm.experienceYears),
+          rating: Number(profileForm.rating),
+        }),
+      });
+      const payload = await readJsonResponse<ProfileResponse>(response);
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || "Unable to save profile.");
+      }
+
+      setProfile(payload.profile);
+      toast.success("Pandit profile saved.");
+      await loadDashboard();
+    } catch (saveError: any) {
+      setProfileError(saveError?.message || "Unable to save profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const joinBooking = (booking: RecentBooking) => {
+    const astrologer = {
+      id: booking.astrologerId,
+      name: booking.astrologerName,
+      avatar: profile?.avatar || profile?.image || "/assets/pandit-assistant.png",
+      image: profile?.image || profile?.avatar || "/assets/pandit-assistant.png",
+    };
+    const durationSeconds = Math.max(1, Number(booking.durationMinutes) || 5) * 60;
+
+    if (booking.mode === "chat") {
+      navigate("/astro-chat", {
+        state: {
+          bookingId: booking.bookingId,
+          roomId: booking.bookingId,
+          astrologer,
+          durationSeconds,
+        },
+      });
+      return;
+    }
+
+    navigate("/astro-call", {
+      state: {
+        bookingId: booking.bookingId,
+        roomId: booking.bookingId,
+        astrologer,
+        durationSeconds,
+        joinExisting: true,
+      },
+    });
   };
 
   return (
@@ -352,6 +519,191 @@ const PanditDashboard = () => {
             <p className="text-sm font-medium">{error}</p>
           </div>
         )}
+
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="flex items-center gap-2 text-lg font-bold">
+                <UserRound className="h-5 w-5 text-orange-600" />
+                Pandit Profile
+              </h2>
+              <p className="text-sm text-slate-500">
+                This profile appears in the devotee dashboard for chat and call bookings.
+              </p>
+            </div>
+            <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+              profileForm.isActive ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"
+            }`}>
+              {profileForm.isActive ? "Visible to devotees" : "Hidden from devotees"}
+            </span>
+          </div>
+
+          {profileError && (
+            <div className="mb-4 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p className="text-sm font-medium">{profileError}</p>
+            </div>
+          )}
+
+          <form onSubmit={saveProfile} className="grid gap-4 lg:grid-cols-4">
+            <div className="lg:col-span-2">
+              <label className="text-sm font-semibold text-slate-700" htmlFor="displayName">
+                Display Name
+              </label>
+              <input
+                id="displayName"
+                value={profileForm.displayName}
+                onChange={(event) => updateProfileField("displayName", event.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                required
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="text-sm font-semibold text-slate-700" htmlFor="expertise">
+                Expertise
+              </label>
+              <input
+                id="expertise"
+                value={profileForm.expertise}
+                onChange={(event) => updateProfileField("expertise", event.target.value)}
+                placeholder="Vedic Astrology, Puja, Numerology"
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-700" htmlFor="pricePerMinute">
+                Fee Per Minute
+              </label>
+              <input
+                id="pricePerMinute"
+                type="number"
+                min="1"
+                value={profileForm.pricePerMinute}
+                onChange={(event) => updateProfileField("pricePerMinute", event.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-700" htmlFor="experienceYears">
+                Experience Years
+              </label>
+              <input
+                id="experienceYears"
+                type="number"
+                min="0"
+                value={profileForm.experienceYears}
+                onChange={(event) => updateProfileField("experienceYears", event.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-700" htmlFor="status">
+                Status
+              </label>
+              <select
+                id="status"
+                value={profileForm.status}
+                onChange={(event) => updateProfileField("status", event.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              >
+                <option value="online">Online</option>
+                <option value="busy">Busy</option>
+                <option value="offline">Offline</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-700" htmlFor="rating">
+                Rating
+              </label>
+              <input
+                id="rating"
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                value={profileForm.rating}
+                onChange={(event) => updateProfileField("rating", event.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="text-sm font-semibold text-slate-700" htmlFor="languages">
+                Languages
+              </label>
+              <input
+                id="languages"
+                value={profileForm.languages}
+                onChange={(event) => updateProfileField("languages", event.target.value)}
+                placeholder="Hindi, English, Sanskrit"
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <label className="text-sm font-semibold text-slate-700" htmlFor="avatar">
+                Profile Image URL
+              </label>
+              <input
+                id="avatar"
+                value={profileForm.avatar}
+                onChange={(event) => updateProfileField("avatar", event.target.value)}
+                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
+
+            <div className="lg:col-span-4">
+              <label className="text-sm font-semibold text-slate-700" htmlFor="bio">
+                Bio
+              </label>
+              <textarea
+                id="bio"
+                rows={3}
+                value={profileForm.bio}
+                onChange={(event) => updateProfileField("bio", event.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 lg:col-span-4">
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold">
+                <input
+                  type="checkbox"
+                  checked={profileForm.modes.includes("chat")}
+                  onChange={() => toggleProfileMode("chat")}
+                />
+                Chat
+              </label>
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold">
+                <input
+                  type="checkbox"
+                  checked={profileForm.modes.includes("call")}
+                  onChange={() => toggleProfileMode("call")}
+                />
+                Call
+              </label>
+              <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold">
+                <input
+                  type="checkbox"
+                  checked={profileForm.isActive}
+                  onChange={(event) => updateProfileField("isActive", event.target.checked)}
+                />
+                Show in devotee dashboard
+              </label>
+
+              <Button type="submit" disabled={isSavingProfile} className="ml-auto rounded-lg">
+                <Save className="h-4 w-4" />
+                {isSavingProfile ? "Saving..." : "Save Profile"}
+              </Button>
+            </div>
+          </form>
+        </section>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
@@ -514,6 +866,7 @@ const PanditDashboard = () => {
                   <th className="px-5 py-3 font-semibold">Duration</th>
                   <th className="px-5 py-3 font-semibold">Earnings</th>
                   <th className="px-5 py-3 font-semibold">Booked At</th>
+                  <th className="px-5 py-3 font-semibold">Join</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -541,11 +894,25 @@ const PanditDashboard = () => {
                       <td className="px-5 py-4 font-medium">{compactNumber.format(booking.durationMinutes)} min</td>
                       <td className="px-5 py-4 font-bold text-slate-950">{currency.format(booking.earnings)}</td>
                       <td className="px-5 py-4 text-slate-600">{formatDate(booking.bookedAt)}</td>
+                      <td className="px-5 py-4">
+                        <button
+                          type="button"
+                          onClick={() => joinBooking(booking)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                        >
+                          {booking.mode === "call" ? (
+                            <PhoneCall className="h-3.5 w-3.5" />
+                          ) : (
+                            <MessageCircle className="h-3.5 w-3.5" />
+                          )}
+                          Join
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-sm font-medium text-slate-500">
+                    <td colSpan={8} className="px-5 py-12 text-center text-sm font-medium text-slate-500">
                       {isLoading ? "Loading bookings..." : "No bookings found"}
                     </td>
                   </tr>
