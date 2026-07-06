@@ -1,0 +1,415 @@
+<IfModule mod_headers.c>
+    # Prevent Clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # Prevent Content Sniffing
+    Header always set X-Content-Type-Options "nosniff"
+
+    # Enforce HTTPS (HSTS)
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+    # XSS Protection
+    Header always set X-XSS-Protection "1; mode=block"
+
+    # Referrer Policy
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Content Security Policy (Comprehensive)
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://translate.google.com https://translate.googleapis.com https://translate-pa.googleapis.com https://accounts.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://*.google.com https://*.googleapis.com https://connect.facebook.net https://appleid.cdn-apple.com; connect-src 'self' https://api.namandarshan.com wss://api.namandarshan.com http://localhost:5001 ws://localhost:5001 http://52.66.103.126 https://www.googletagmanager.com https://*.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://translate.googleapis.com https://accounts.google.com https://*.googleapis.com https://api.groq.com https://api.dicebear.com https://namandarshan-bucket.s3.ap-south-1.amazonaws.com https://www.facebook.com data:; img-src 'self' data: blob: https: https://res.cloudinary.com https://*.google.com https://api.dicebear.com https://namandarshan-bucket.s3.ap-south-1.amazonaws.com; media-src 'self' blob: data: http://localhost:5001 https://localhost https://namandarshan-bucket.s3.ap-south-1.amazonaws.com https://*.amazonaws.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com https://translate.googleapis.com; font-src 'self' https://fonts.gstatic.com data: https:; frame-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://accounts.google.com https://www.youtube.com https://naman-kheel.vercel.app https://cosmic-compass-drab.vercel.app https://www.facebook.com https://appleid.apple.com; base-uri 'self'; object-src 'none'; frame-ancestors 'self';"
+
+    # Cross-Origin Opener Policy (Fix for Google/Facebook Login Popups)
+    Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+
+    # Noindex specific page
+    SetEnvIf Request_URI "^/elementor-hf/packages-2/?$" noindex_page=1
+    Header set X-Robots-Tag "noindex, nofollow" env=noindex_page
+
+    # Noindex robots.txt
+    SetEnvIf Request_URI "^/robots\.txt$" noindex_robots=1
+    Header set X-Robots-Tag "noindex, nofollow" env=noindex_robots
+</IfModule>
+
+# ------------------------------------------------------------------------------
+# 0. BASIC WEB APPLICATION FIREWALL (WAF)
+# ------------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Block Suspicious Query Strings (SQLi, XSS, Path Traversal)
+  RewriteCond %{QUERY_STRING} (|%3E|%3C)(<|>|'|"|%27|%22)(.*)$ [NC,OR]
+  RewriteCond %{QUERY_STRING} (globals|mosconfig|base64_encode|localhost)(.*)$ [NC,OR]
+  RewriteCond %{QUERY_STRING} (boot\.ini|etc/passwd|self/environ) [NC,OR]
+  RewriteCond %{QUERY_STRING} (\|%7C)([\w\s]+) [NC,OR]
+  RewriteCond %{QUERY_STRING} (.)(etc/passwd|/bin/login|/bin/sh|/bin/bash|/bin/csh|/bin/tcsh|/bin/ksh)(.) [NC,OR]
+  RewriteCond %{QUERY_STRING} (\<|%3C).script.(\>|%3E) [NC,I,OR]
+  RewriteCond %{QUERY_STRING} (javascript:)(.*)(;) [NC,I,OR]
+  RewriteCond %{QUERY_STRING} (;|<|>|'|"|\)|%0A|%0D|%22|%27|%3C|%3E|%00).(/\|union|select|insert|cast|set|declare|drop|update|md5|benchmark) [NC,I,OR]
+  RewriteCond %{QUERY_STRING} \b(union|insert|cast|set|declare|drop|update|md5|benchmark)\b [NC,I]
+  RewriteRule ^(.*)$ - [F,L]
+
+  # Block Common Scanner/Bot User-Agents
+  RewriteCond %{HTTP_USER_AGENT} ^.(libwww-perl|curl|wget|python|nikto|scan|sqlmap|nmap). [NC,OR]
+  RewriteCond %{HTTP_USER_AGENT} ^$
+  RewriteRule ^(.*)$ - [F,L]
+
+  # Block HTTP Request Methods
+  RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK|OPTIONS|HEAD) [NC]
+  RewriteRule ^.* - [F,L]
+</IfModule>
+
+# ------------------------------------------------------------------------------
+# 1. PERMANENT 301 REDIRECTS (FOR SEO)
+# ------------------------------------------------------------------------------
+Options +FollowSymLinks
+RewriteEngine On
+
+# Global: Remove trailing slash from URLs (SEO)
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)/$ https://namandarshan.com/$1 [L,R=301]
+
+# Sitemap Redirects
+Redirect 301 /sitemap_index.xml https://namandarshan.com/sitemap.xml
+
+# Legacy WordPress Cleanup
+Redirect 410 /product/
+Redirect 404 /author/user/
+
+# Remove old sitemap files
+Redirect 404 /ttbm_guide-sitemap.xml
+Redirect 404 /ttbm_tour-sitemap.xml
+Redirect 404 /page-sitemap.xml
+Redirect 404 /category-sitemap.xml
+Redirect 404 /post-sitemap.xml
+Redirect 404 /ttbm_places-sitemap.xml
+Redirect 404 /elementskit_template-sitemap.xml
+Redirect 404 /product-sitemap.xml
+
+Redirect 301 /yatra-specials https://namandarshan.com/yatra
+Redirect 301 /vip-darshan-package https://namandarshan.com/exclusive-temple-darshan-packeges
+Redirect 301 /darshan-booking https://namandarshan.com/darshan
+Redirect 301 /panditji https://namandarshan.com/puja
+# Blogs
+Redirect 301 /2024/02/14/golden-temple-yatra https://namandarshan.com/blog/golden-temple-yatra
+Redirect 301 /2024/02/14/padmanabhaswamy-temple-yatra https://namandarshan.com/blog/padmanabhaswamy-temple-yatra
+Redirect 301 /chardham_blog https://namandarshan.com/blog/chardham-yatra-medical-tips-packing-guide
+
+# Temples
+Redirect 301 /adiyogi-shiva-temple https://namandarshan.com/temples/adiyogi-shiva-temple
+Redirect 301 /airavatesvara-temple https://namandarshan.com/temples/airavatesvara-temple
+Redirect 301 /badrinath-temple https://namandarshan.com/temples/badrinath-temple
+Redirect 301 /baidyanath-temple https://namandarshan.com/temples/baidyanath-temple
+Redirect 301 /banke-bihari-temple https://namandarshan.com/temples/banke-bihari-temple
+Redirect 301 /belur-math-howrah https://namandarshan.com/temples/belur-math-temple
+Redirect 301 /birla-mandir https://namandarshan.com/temples/birla-mandir-temple
+Redirect 301 /chamundeshwari-temple https://namandarshan.com/temples/chamundeshwari-temple
+Redirect 301 /dakshineswar-kali-temple https://namandarshan.com/temples/dakshineswar-kali-temple
+Redirect 301 /dwarkadhish-temple https://namandarshan.com/temples/dwarkadhish-temple
+Redirect 301 /gangotri-temple https://namandarshan.com/temples/gangotri-temple
+Redirect 301 /guruvayur-temple https://namandarshan.com/temples/guruvayur-temple
+Redirect 301 /kalighat-kali-temple https://namandarshan.com/temples/kalighat-kali-temple
+Redirect 301 /kanyakumari-bhagavathy-amman-temple https://namandarshan.com/temples/kanyakumari-bhagavathy-amman-temple
+Redirect 301 /kashi-vishwanath-temple https://namandarshan.com/temples/kashi-vishwanath-temple
+Redirect 301 /kedarnath-temple https://namandarshan.com/temples/kedarnath-temple
+Redirect 301 /khatu-shyam-temple https://namandarshan.com/temples/khatu-shyam-ji-temple
+Redirect 301 /laxminarayan-temple https://namandarshan.com/temples/laxminarayan-temple-birla-mandir-temple
+Redirect 301 /lingaraj-temple-bhubaneswar-odisha https://namandarshan.com/temples/lingaraj-temple
+Redirect 301 /mahakaleshwar-jyotirlinga https://namandarshan.com/temples/mahakaleshwar-jyotirlinga-temple
+Redirect 301 /mata-vaishno-devi https://namandarshan.com/temples/vaishno-devi-temple
+Redirect 301 /meenakshi-temple https://namandarshan.com/temples/meenakshi-temple
+Redirect 301 /mehandipur-balaji-temple https://namandarshan.com/temples/mehandipur-balaji-temple
+Redirect 301 /naina-devi-temple https://namandarshan.com/temples/shri-naina-devi-temple
+Redirect 301 /neelkanth-mahadev-temple https://namandarshan.com/temples/neelkanth-mahadev-temple
+Redirect 301 /padmanabhaswamy-temple-thiruvananthapuram https://namandarshan.com/temples/padmanabhaswamy-temple
+Redirect 301 /palani-murugan-temple https://namandarshan.com/temples/palani-murugan-temple
+Redirect 301 /palitana-jain-tirth-temple https://namandarshan.com/temples/parasnath-digambar-jain-temple
+Redirect 301 /parasnath-digambar-jain-temple https://namandarshan.com/temples/parasnath-digambar-jain-temple
+Redirect 301 /ram-janmabhoomi-ayodhya https://namandarshan.com/temples/ram-janmabhoomi-temple
+Redirect 301 /ramanathaswamy-temple https://namandarshan.com/temples/ramanathaswamy-temple
+Redirect 301 /sabarimala-sastha-temple https://namandarshan.com/temples/sabarimala-temple
+Redirect 301 /sai-baba-mandir https://namandarshan.com/temples/sai-baba-mandir-temple
+Redirect 301 /shree-shantadurga-temple-yatra-goa https://namandarshan.com/temples/shree-shantadurga-temple-yatra-temple
+Redirect 301 /shree-somnath-jyotirling-temple https://namandarshan.com/temples/shree-somnath-jyotirling-temple
+Redirect 301 /siddhivinayak-temple-mumbai https://namandarshan.com/temples/siddhivinayak-temple--temple
+Redirect 301 /sri-venkateswara-swami-temple https://namandarshan.com/temples/sri-venkateswara-swami-temple
+Redirect 301 /sri-venkateswara-swami-temple-tirumala https://namandarshan.com/temples/sri-venkateswara-swami-temple
+Redirect 301 /sringeri-sharada-peetham-temple-karnataka https://namandarshan.com/temples/sringeri-sharada-peetham-temple
+Redirect 301 /swaminarayan-akshardham-mandir https://namandarshan.com/temples/swaminarayan-akshardham-mandir-temple
+Redirect 301 /tara-temple-tarapith https://namandarshan.com/temples/tara-temple
+Redirect 301 /the-golden-temple https://namandarshan.com/temples/the-golden-temple
+Redirect 301 /the-golden-temple-2 https://namandarshan.com/temples/the-golden-temple
+Redirect 301 /the-kamakhya-temple-3 https://namandarshan.com/temples/the-kamakhya-temple
+Redirect 301 /thillai-nataraja-temple https://namandarshan.com/temples/thillai-nataraja-temple
+Redirect 301 /tour/meenakshi-temple https://namandarshan.com/temples/meenakshi-temple
+Redirect 301 /tour/padmanabhaswamy-temple https://namandarshan.com/temples/padmanabhaswamy-temple
+Redirect 301 /tour/ramanathaswamy-temple https://namandarshan.com/temples/ramanathaswamy-temple
+Redirect 301 /trimbakeshwar-jyotirlinga-nashik-maharashtra-2 https://namandarshan.com/temples/trimbakeshwar-jyotirlinga-temple
+Redirect 301 /trinetra-ganesh-temple https://namandarshan.com/temples/trinetra-ganesh-temple
+Redirect 301 /trinetra_ganesh_temple https://namandarshan.com/temples/trinetra-ganesh-temple
+Redirect 301 /udupi-sri-krishna-matha https://namandarshan.com/temples/udupi-sri-krishna-matha-temple
+Redirect 301 /vaishno-devi-temple https://namandarshan.com/temples/vaishno-devi-temple
+Redirect 301 /varadharaja-perumal-temple https://namandarshan.com/temples/varadharaja-perumal-temple
+Redirect 301 /vindhyachal-temple-mirzapur https://namandarshan.com/temples/vindhyachal-temple
+Redirect 301 /virupaksha-temple https://namandarshan.com/temples/virupaksha-temple
+Redirect 301 /yamunotri-temple https://namandarshan.com/temples/yamunotri-dham-temple
+Redirect 301 /temple https://namandarshan.com/temples
+Redirect 301 /tour/sai-baba-mandir https://namandarshan.com/temples/sai-baba-mandir
+Redirect 301 /travel/birla-mandir-hyderabad-telangana https://namandarshan.com/temples/birla-mandir-temple
+Redirect 301 /travel/palani-murugan-temple https://namandarshan.com/temples/palani-murugan-temple
+Redirect 301 /travel/ranganathaswamy-temple https://namandarshan.com/temples/ranganathaswamy-temple
+Redirect 301 /travel/ram-janmabhoomi https://namandarshan.com/temples/ram-janmabhoomi
+Redirect 301 /travel/the-golden-temple https://namandarshan.com/temples/the-golden-temple
+Redirect 301 /tour/kanyakumari-amman-temple https://namandarshan.com/temples/kanyakumari-amman-temple
+Redirect 301 /tour/belur-math https://namandarshan.com/temples/belur-math
+Redirect 301 /travel/kedarnath-temple https://namandarshan.com/temples/kedarnath-temple
+Redirect 301 /2024/02/14/vaishno-devi-yatra https://namandarshan.com/temples/vaishno-devi
+Redirect 301 /haridwar-maha-rudrabhishek https://namandarshan.com/chadhava/sri-amaralingeswara-swamy-maha-rudrabhishekam--vip-darshan-seva-chadhava
+Redirect 301 /travel/ram-janmabhoomi-2-2-2 https://namandarshan.com/temples/ram-janmabhoomi
+Redirect 301 /travel-category/trimbakeshwar-jyotirlinga https://namandarshan.com/temples/trimbakeshwar-jyotirlinga
+Redirect 301 /travel-category/mahakaleshwar-jyotirlinga https://namandarshan.com/temples/mahakaleshwar-jyotirlinga
+Redirect 301 /travel-category/trimbakeshwar-jyotirlinga https://namandarshan.com/temples/trimbakeshwar-jyotirlinga
+Redirect 301 /travel/kashi-vishwanath-temple https://namandarshan.com/temples/kashi-vishwanath-temple
+Redirect 301 /travel/gangotri-temple https://namandarshan.com/temples/gangotri-temple
+Redirect 301 /travel/iskcon-mayapur https://namandarshan.com/temples/iskcon-temple
+Redirect 301 /shirdi-yatra-package https://namandarshan.com/temples/sai-baba-mandir-temple
+Redirect 301 /travel-category/kashi-vishwanath-temple https://namandarshan.com/temples/kashi-vishwanath-temple
+Redirect 301 /bhimashankar-jyotirlinga https://namandarshan.com/temples/bhimashankar-jyotirlinga
+Redirect 301 /darshan/sri-potuluri-veera-brahmendra-swamy-matam-vipdarshan https://namandarshan.com/temple/sri-potuluri-veera-brahmendra-swamy-matam-vipdarshan
+Redirect 301 /containers https://namandarshan.com/
+Redirect 301 /temples/siddhivinayak-temple-temple https://namandarshan.com/temples/siddhivinayak-temple
+Redirect 301 /darshan/trimbakeshwar-temple-vipdarshan https://namandarshan.com/temples/trimbakeshwar-jyotirlinga-temple
+Redirect 301 /darshan/salasar-dham-temple-vipdarshan https://namandarshan.com/temples/salasar-dham-temple
+Redirect 301 /darshan/vaishnodevi-temple-vipdarshan https://namandarshan.com/temples/vaishno-devi-temple
+Redirect 301 /travel/varadharaja-perumal https://namandarshan.com/temples/varadharaja-perumal-temple
+Redirect 301 /darshan/venkateswara-swamy-temple-vipdarshan https://namandarshan.com/temples/sri-venkateswara-swami-temple
+Redirect 301 /bhimashankar-rudrabhishek-puja https://namandarshan.com/puja/shiv-rudrabhishek
+
+Redirect 301 /vindhyachal-temple-mirzapur https://namandarshan.com/temples/vindhyachal-temple
+Redirect 301 /guruvayur-temple https://namandarshan.com/temples/guruvayur-temple
+Redirect 301 /neelkanth-mahadev-temple https://namandarshan.com/temples/neelkanth-mahadev-temple
+Redirect 301 /sri-venkateswara-swami-temple-tirumala https://namandarshan.com/temples/sri-venkateswara-swami-temple
+Redirect 301 /mehandipur-balaji-temple https://namandarshan.com/temples/mehandipur-balaji-temple
+Redirect 301 /virupaksha-temple https://namandarshan.com/temples/virupaksha-temple
+Redirect 301 /varadharaja-perumal-temple https://namandarshan.com/temples/varadharaja-perumal-temple
+
+Redirect 301 /temple/chilkur-balaji-temple-visa-balaji-telangana https://namandarshan.com/temples/chilkur-balaji-temple-visa-balaji-temple
+
+Redirect 301 /yamunotri-temple https://namandarshan.com/temples/yamunotri-temple
+
+Redirect 301 /dakshineswar-kali-temple?book=open https://namandarshan.com/temples/dakshineswar-kali-temple
+Redirect 301 /virupaksha-temple?book=open https://namandarshan.com/temples/virupaksha-temple
+Redirect 301 /laxminarayan-temple?book=open https://namandarshan.com/temples/laxminarayan-temple-birla-mandir-temple
+Redirect 301 /udupi-sri-krishna-matha?book=open https://namandarshan.com/temples/udupi-sri-krishna-matha-temple?book=open
+Redirect 301 /shree-shantadurga-temple-yatra-goa?book=open https://namandarshan.com/temples/shree-shantadurga-temple-yatra-temple
+Redirect 301 /dwarkadhish-temple?book=open https://namandarshan.com/temples/dwarkadhish-temple
+Redirect 301 /kedarnath-temple?book=open https://namandarshan.com/temples/kedarnath-temple
+Redirect 301 /thillai-nataraja-temple?book=open https://namandarshan.com/temples/thillai-nataraja-temple
+Redirect 301 /siddhivinayak-temple-mumbai?book=open https://namandarshan.com/temples/siddhivinayak-temple--temple
+Redirect 301 /parasnath-digambar-jain-temple?book=open https://namandarshan.com/temples/parasnath-digambar-jain-temple
+Redirect 301 /sai-baba-mandir?book=open https://namandarshan.com/temples/sai-baba-mandir-temple
+Redirect 301 /badrinath-temple?book=open https://namandarshan.com/temples/badrinath-temple
+Redirect 301 /airavatesvara-temple?book=open https://namandarshan.com/temples/airavatesvara-temple
+Redirect 301 /ramanathaswamy-temple?book=open https://namandarshan.com/temples/ramanathaswamy-temple
+
+Redirect 301 /puja-rituals/Puja https://namandarshan.com/puja
+Redirect 301 /puja-rituals https://namandarshan.com/puja
+
+Redirect 301 /packages https://namandarshan.com/exclusive-temple-darshan-packeges
+
+Redirect 301 /vrindavan-yatra-package https://namandarshan.com/vrindavan-yatra
+Redirect 301 /live-darshan-kedarnath https://namandarshan.com/live-darshan/kedarnath-temple
+
+Redirect 301 /pitra-dosh-nivaran-puja-in-haridwar https://namandarshan.com/puja
+Redirect 301 /astro https://namandarshan.com/astro-naman
+
+Redirect 301 /live-darshan-golden-temple https://namandarshan.com/live-darshan/golden-temple
+
+Redirect 301 /padmanabhaswamy-temple-thiruvananthapuram https://namandarshan.com/temples/padmanabhaswamy-temple
+
+Redirect 301 /the-kamakhya-temple-3 https://namandarshan.com/temples/the-kamakhya-temple
+
+Redirect 301 /bhimashankar-laghu-rudrabhishek https://namandarshan.com/puja/shiv-rudrabhishek
+
+Redirect 301 /naina-devi-temple https://namandarshan.com/temples/-naina-devi-temple
+Redirect 301 /gangotri-temple https://namandarshan.com/temples/gangotri-temple
+
+Redirect 301 /darshan-booking https://namandarshan.com/darshan
+Redirect 301 /pandit-in-dwarka https://namandarshan.com/puja
+
+Redirect 301 /trimbakeshwar-jyotirlinga-nashik-maharashtra-2 https://namandarshan.com/temples/trimbakeshwar-jyotirlinga-temple
+
+Redirect 301 /meenakshi-temple https://namandarshan.com/temples/meenakshi-temple
+
+Redirect 301 /live-darshan-ram-mandir https://namandarshan.com/live-darshan/ram-mandir
+Redirect 301 /chamundeshwari-temple https://namandarshan.com/temples/chamundeshwari-temple
+
+Redirect 301 /live-darshan-mahakaleshwar https://namandarshan.com/live-darshan/mahakaleshwar
+
+Redirect 301 /kanyakumari-bhagavathy-amman-temple https://namandarshan.com/temples/kanyakumari-bhagavathy-amman-temple/
+
+Redirect 301 /panchamrut-abhishek-at-bhimashankar-temple https://namandarshan.com/puja/panchamrut-abhishek-puja
+
+Redirect 301 /ram-mandir-darshan https://namandarshan.com/darshan/ram-mandir-vipdarshan
+
+Redirect 301 /vip-darshan-package https://namandarshan.com/darshan
+
+Redirect 301 /pujas_/shri-shiv-rudrabhishek-puja https://namandarshan.com/puja/shiv-rudrabhishek-puja
+
+Redirect 301 /travel/udupi-sri-krishna https://namandarshan.com/temples/udupi-sri-krishna-matha-temple
+
+Redirect 301 /pujas_//maha-shakti-tridevi-puja https://namandarshan.com/puja/maha-shakti-tridevi-puja
+
+Redirect 301 /travel/yamunotri-temple https://namandarshan.com/temples/yamunotri-temple
+Redirect 301 /tour/yamunotri-temple https://namandarshan.com/temples/yamunotri-temple
+
+Redirect 301 /tour/the-golden-temple/ https://namandarshan.com/temples/the-golden-temple
+
+Redirect 301 /live-darshan-golden/ https://namandarshan.com/live-darshan/golden-temple
+
+Redirect 301 /packages01 https://namandarshan.com/yatra
+
+Redirect 301 /kedarnath-yatra-package https://namandarshan.com/kedarnath-yatra
+Redirect 301 /chardham-yatra-package https://namandarshan.com/char-dham-yatra
+
+Redirect 301 /tour/kedarnath-yatra-package/ https://namandarshan.com/kedarnath-yatra
+
+Redirect 301 /package/jagannath-yatra/ https://namandarshan.com/temples/jagannath-temple
+
+Redirect 301 /package/ayodhya-yatra/ https://namandarshan.com/ayodhya-yatra
+
+Redirect 301 /jagannath-yatra-package https://namandarshan.com/temples/jagannath-temple
+Redirect 301 /ayodhya-yatra-package https://namandarshan.com/ayodhya-yatra
+Redirect 301 /shirdi-yatra-package https://namandarshan.com/shirdi-yatra
+
+Redirect 301 /puja-booking-online https://namandarshan.com/puja
+
+Redirect 301 /tour/trimbakeshwar-jyotirlinga/ https://namandarshan.com/darshan/trimbakeshwar-jyotirlinga-vipdarshan
+Redirect 301 /tour/sri-venkateswara-swami-temple/ https://namandarshan.com/temples/sri-venkateswara-swami-temple
+
+Redirect 301 /tour/ayodhya-yatra-packages/ https://namandarshan.com/ayodhya-yatra
+Redirect 301 /tour/shirdi-yatra-packages/ https://namandarshan.com/shirdi-yatra
+
+Redirect 301 /tour/virupaksha-temple-hampi-karnataka/ https://namandarshan.com/temples/virupaksha-temple
+Redirect 301 /tour/yamunotri-temple https://namandarshan.com/temples/yamunotri-temple
+Redirect 301 /parasnath-digambar-jain-temple?book=open https://namandarshan.com/temples/parasnath-digambar-jain-temple
+
+Redirect 301 /sai-baba-mandir/ https://namandarshan.com/temples/sai-baba-mandir-temple/
+
+Redirect 301 /haridwar-navgrah-dosh-nivaran-puja/ https://namandarshan.com/puja/
+
+Redirect 301 /baidyanath-temple/?book=open https://namandarshan.com/temples/baidyanath-temple/
+Redirect 301 /badrinath-temple https://namandarshan.com/temples/badrinath-temple
+Redirect 301 /puja-rituals https://namandarshan.com/puja
+Redirect 301 /pitra-dosh-nivaran-puja-in-haridwar https://namandarshan.com/puja
+Redirect 301 /thillai-nataraja-temple https://namandarshan.com/temples/thillai-nataraja-temple
+Redirect 301 /airavatesvara-temple https://namandarshan.com/temples/airavatesvara-temple
+Redirect 301 /live-darshan-tirupati-balaji https://namandarshan.com/live-darshan/tirupati-balaji
+Redirect 301 /temples/10 https://namandarshan.com/temples/banke-bihari-temple
+Redirect 301 /temples/12 https://namandarshan.com/temples/sri-venkateswara-swami-temple
+Redirect 301 /temples/22 https://namandarshan.com/temples/siddhivinayak-temple
+Redirect 301 /temples/40 https://namandarshan.com/temples/varadharaja-perumal-temple
+Redirect 301 /temples/56 https://namandarshan.com/temples/dakshineswar-kali-temple
+Redirect 301 /temples/19 https://namandarshan.com/temples/sai-baba-mandir
+Redirect 301 /temples/13 https://namandarshan.com/temples/vaishno-devi-temple
+Redirect 301 /temples/16 https://namandarshan.com/temples/kashi-vishwanath-temple
+Redirect 301 /temples/17 https://namandarshan.com/temples/the-kamakhya-temple
+Redirect301 /temples/54 https://namandarshan.com/temples/belur-math-temple
+Redirect 301 /temples/31 https://namandarshan.com/temples/trinetra-ganesh-temple
+Redirect 301 /temples/2 https://namandarshan.com/temples/baidyanath-temple
+Redirect 301 /temples/20 https://namandarshan.com/temples/meenakshi-temple
+Redirect 301 /temples/33 https://namandarshan.com/temples/virupaksha-temple
+Redirect 301 /temples/49 https://namandarshan.com/temples/laxminarayan-temple-birla-mandir-temple
+Redirect 301 /temples/45 https://namandarshan.com/temples/tara-temple
+Redirect 301 /temples/58 https://namandarshan.com/temples/yamunotri-temple
+Redirect 301 /temples/55 https://namandarshan.com/temples/mehandipur-balaji-temple
+Redirect 301 /temples/47 https://namandarshan.com/temples/adiyogi-shiva-temple
+
+# Yatras / Packages
+Redirect 301 /ayodhya-yatra-package https://namandarshan.com/ayodhya-yatra
+Redirect 301 /chardham-yatra-package https://namandarshan.com/char-dham-yatra
+Redirect 301 /jagannath-yatra https://namandarshan.com/temples/jagannath-temple
+Redirect 301 /jagannath-yatra-package https://namandarshan.com/temples/jagannath-temple
+Redirect 301 /kedarnath-yatra-package https://namandarshan.com/kedarnath-yatra
+Redirect 301 /kedartnath-yatra https://namandarshan.com/kedarnath-yatra
+Redirect 301 /shirdi-yatra-package https://namandarshan.com/shirdi-yatra
+Redirect 301 /vrindavan-yatra-package https://namandarshan.com/vrindavan-yatra
+Redirect 301 /packages https://namandarshan.com/exclusive-temple-darshan-packeges
+Redirect 301 /yatra_specials https://namandarshan.com/yatra
+
+# Darshan / VIP Services
+Redirect 301 /baidyanath-dham-temple-darshan https://namandarshan.com/darshan/baidyanath-dham-temple-darshan
+Redirect 301 /bhimashankar-jyotirlinga https://namandarshan.com/darshan/bhimashankar-temple
+Redirect 301 /dwarkadhish-darshan https://namandarshan.com/darshan/dwarkadhish-darshan
+Redirect 301 /jagannath-temple https://namandarshan.com/darshan/jagannath-temple-darshan
+Redirect 301 /kashi%20darshan https://namandarshan.com/darshan/kashi-vipdarshan
+Redirect 301 /kedarnath-darshan https://namandarshan.com/darshan/kedarnath-dham-vipdarshan
+Redirect 301 /mahakaleshwar-darshan https://namandarshan.com/darshan/mahakaleshwar-vipdarshan
+Redirect 301 /ram-mandir-darshan https://namandarshan.com/darshan/ram-mandir-vipdarshan
+Redirect 301 /tirupati-balaji-darshan https://namandarshan.com/darshan/tirupati-balaji-vipdarshan
+ 
+
+# Prasadams
+Redirect 301 /buy-jagannath-puri-mahaprasad-online https://namandarshan.com/prasadam/jagannath-puri-khaja
+Redirect 301 /buy-kashi-vishwanath-prasadam-online https://namandarshan.com/prasadam/kashi-vishwanath
+Redirect 301 /buy-mahakaleshwar-ujjain-prasadam-online https://namandarshan.com/prasadam/mahakaleshwar-ujjain
+Redirect 301 /buy-mata-vaishno-devi-prasadam-online https://namandarshan.com/prasadam/mata-vaishno-devi
+Redirect 301 /buy-ram-mandir-prasad-online https://namandarshan.com/prasadam/ram-mandir-ayodhya
+Redirect 301 /buy-tirupati-prasadam-online https://namandarshan.com/prasadam/tirupati-balaji-laddu
+
+# Pujas / Sevas
+Redirect 301 /bhimashankar-ekadashi-rudra-abhishek https://namandarshan.com/puja
+Redirect 301 /bhimashankar-laghu-rudrabhishek https://namandarshan.com/puja/shiv-rudrabhishek
+Redirect 301 /bhimashankar-panchopchar-puja https://namandarshan.com/puja/shiv-rudrabhishek
+Redirect 301 /bhimashankar-rudrabhishek-puja https://namandarshan.com/puja/shiv-rudrabhishek
+Redirect 301 /haridwar-maha-rudrabhishek https://namandarshan.com/puja/shiv-rudrabhishek-puja
+Redirect 301 /haridwar-navgrah-dosh-nivaran-puja https://namandarshan.com/puja
+Redirect 301 /mahapuja-at-bhimashankar https://namandarshan.com/puja
+Redirect 301 /panchamrut-abhishek-at-bhimashankar-temple https://namandarshan.com/puja/panchamrut-abhishek-puja
+Redirect 301 /pitra-dosh-nivaran-puja-in-haridwar https://namandarshan.com/puja
+Redirect 301 /puja-rituals https://namandarshan.com/puja
+Redirect 301 /pujas_ https://namandarshan.com/puja
+Redirect 301 /puja/shri-maha-laxmi-mata-puja https://namandarshan.com/puja/maha-shakti-tridevi-puja
+Redirect 301 /pujas_/maha-shakti-tridevi-puja https://namandarshan.com/puja/maha-shakti-tridevi-puja
+Redirect 301 /pujas_/shri-maha-laxmi-mata-puja https://namandarshan.com/puja/maha-laxmi-mata-puja
+Redirect 301 /pujas_/shri-shiv-rudrabhishek-puja https://namandarshan.com/puja/shiv-rudrabhishek-puja
+Redirect 301 /pujas_/sunderkand-path https://namandarshan.com/puja/sunderkand-path-puja
+Redirect 301 /shodashopachar-puja-kedarnath https://namandarshan.com/puja/shodashopachar-puja
+
+# Chadhava / Seva
+Redirect 301 /brahmin-panda-seva https://namandarshan.com/chadhava/brahmin-panda-seva-chadhava
+Redirect 301 /jyotirlinga-chadhava https://namandarshan.com/chadhava/jyotirlinga-chadhava
+Redirect 301 /khatu-shyam-aaradhana https://namandarshan.com/chadhava/khatu-shyam-aaradhana-chadhava
+Redirect 301 /kundali-grah-shanti https://namandarshan.com/chadhava/kundali-grah-shanti-chadhava
+Redirect 301 /maghi-purnima-snan https://namandarshan.com/chadhava/maghi-purnima-snan-chadhava
+Redirect 301 /maha-shivratri-seva https://namandarshan.com/chadhava/maha-shivratri-seva-chadhava
+Redirect 301 /mangalnath-mahadev https://namandarshan.com/chadhava/mangalnath-mahadev-chadhava
+Redirect 301 /shiv-mantra-jaap https://namandarshan.com/chadhava/shiv-mantra-jaap-chadhava
+Redirect 301 /triple-devi-blessings https://namandarshan.com/chadhava/triple-devi-blessings-chadhava
+
+# Live Darshan
+Redirect 301 /live-darshan-golden-temple https://namandarshan.com/live-darshan/golden-temple
+Redirect 301 /live-darshan-jagannath https://namandarshan.com/live-darshan/jagannath-temple
+Redirect 301 /live-darshan-kashi-vishwanath https://namandarshan.com/live-darshan/kashi-vishwanath
+Redirect 301 /live-darshan-kedarnath https://namandarshan.com/live-darshan/kedarnath-temple
+Redirect 301 /live-darshan-mahakaleshwar https://namandarshan.com/live-darshan/mahakaleshwar
+Redirect 301 /live-darshan-ram-mandir https://namandarshan.com/live-darshan/ram-mandir
+Redirect 301 /live-darshan-somnath https://namandarshan.com/live-darshan/somnath-temple
+Redirect 301 /live-darshan-tirupati-balaji https://namandarshan.com/live-darshan/tirupati-balaji
+Redirect 301 /live-darshan-vaishno-devi https://namandarshan.com/live-darshan/vaishno-devi
+
+# Miscellaneous
+Redirect 301 /astro https://namandarshan.com/astro-naman
+# Note: Redirecting root to a blog is unusual, but included as requested:
+# Redirect 301 / https://namandarshan.com/blog/vaishno-devi-yatra
+
+# ------------------------------------------------------------------------------
+# 2. REACT ROUTER FALLBACK (Keep at the bottom)
+# ------------------------------------------------------------------------------
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteCond %{REQUEST_FILENAME} !-l
+  RewriteRule . /index.html [L]
+</IfModule>

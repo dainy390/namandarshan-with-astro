@@ -1,0 +1,4 @@
+# Force non-trailing slash (for Amplify/Netlify)
+/*/  /:1  301
+
+/*    /index.html   200

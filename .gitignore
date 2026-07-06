@@ -1,0 +1,71 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Vite
+dist
+dist-ssr
+*.local
+# Backend
+backend/node_modules/
+backend/server/.env
+backend/api/.env
+backend/*.log
+
+.vercel
+# Playwright
+playwright-report
+test-results
+
+# ── Debug & artifact files (do not commit) ──────────────────────────
+*.txt
+!public/**/*.txt
+!public/robots.txt
+audit_results.*
+backend_routes.*
+backend_tree.*
+build_error.*
+build_output*
+err.txt
+lint_output.*
+out.txt
+out2.txt
+git_status_output.*
+forms-results*.json
+test-results*.json
+refactor_app.*
+refactor_app_lazy.*
+add_share.cjs
+tmp_verify_referral.cjs
+old_app.tsx
+temples_list.*
+TODO_SES.md
+vite.config.ts.timestamp-*
+
+

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<body>
+  <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.aac" />
+  <button onclick="upload()">Upload</button>
+  <pre id="result"></pre>
+
+  <script>
+    async function upload() {
+      const file = document.getElementById('fileInput').files[0];
+      if (!file) return alert('Please select a file first');
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('http://localhost:5001/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        document.getElementById('result').innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        document.getElementById('result').innerText = 'ERROR: ' + err.message;
+      }
+    }
+  </script>
+</body>
+</html>

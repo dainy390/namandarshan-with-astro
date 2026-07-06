@@ -1,0 +1,371 @@
+{
+  "redirects": [
+    {
+      "source": "/travel/thillai-nataraja-temple-chidambaram-tamil-nadu/",
+      "destination": "/temples/thillai-nataraja-temple",
+      "permanent": true
+    },
+    {
+      "source": "/live-darshan-golden/",
+      "destination": "/live-darshan/golden-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel/udupi-sri-krishna/",
+      "destination": "/temples/udupi-sri-krishna-matha-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel/trimbakeshwar-jyotirlinga/",
+      "destination": "/temples/trimbakeshwar-jyotirlinga-temple",
+      "permanent": true
+    },
+    {
+      "source": "/puja_/",
+      "destination": "/puja",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mysteries-of-jagannath-puri",
+      "destination": "/blogs/mysteries-of-jagannath-puri",
+      "permanent": true
+    },
+    {
+      "source": "/travel-category/platinum-yatra-package/feed/",
+      "destination": "/exclusive-temple-darshan-packeges",
+      "permanent": true
+    },
+    {
+      "source": "/travel/siddhivinayak-temple/",
+      "destination": "/temples/siddhivinayak-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel/kalighat-kali-temple/",
+      "destination": "/temples/kalighat-kali-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/varadharaja-perumal/",
+      "destination": "/temples/varadharaja-perumal-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/vaishno-devi-temple/",
+      "destination": "/temples/vaishno-devi-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/chardham-yatra-packages/",
+      "destination": "/char-dham-yatra",
+      "permanent": true
+    },
+    {
+      "source": "/tour/kedarnath-platinum-yatra-package/",
+      "destination": "/exclusive-temple-darshan-packeges",
+      "permanent": true
+    },
+    {
+      "source": "/tour/airavatesvara-temple/",
+      "destination": "/temples/airavatesvara-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/kashi-vishwanath-temple/",
+      "destination": "/temples/kashi-vishwanath-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel/parasnath-digambar-jain-temple/",
+      "destination": "/temples/parasnath-digambar-jain-temple",
+      "permanent": true
+    },
+    {
+      "source": "/package/vrindavan-yatra/",
+      "destination": "/vrindavan-yatra",
+      "permanent": true
+    },
+    {
+      "source": "/tour/parasnath-digambar-jain-temple/",
+      "destination": "/temples/parasnath-digambar-jain-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/kalighat-kali-temple/",
+      "destination": "/temples/kalighat-kali-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel/mahakaleshwar-jyotirlinga/",
+      "destination": "/temples/mahakaleshwar-jyotirlinga-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel/vindhyachal-temple/",
+      "destination": "/temples/vindhyachal-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel-category/neelkanth-mahadev-temple/",
+      "destination": "/temples/neelkanth-mahadev-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/siddhivinayak-temple/",
+      "destination": "/temples/siddhivinayak-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel-category/tara-temple/",
+      "destination": "/temples/tara-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/ranganathaswamy-temple/",
+      "destination": "/temples/ranganathaswamy-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/shree-somnath-jyotirling-temple/",
+      "destination": "/temples/shree-somnath-jyotirling-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/thillai-nataraja-temple-chidambaram-tamil-nadu/",
+      "destination": "/temples/thillai-nataraja-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/dwarkadhish-temple/",
+      "destination": "/temples/dwarkadhish-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/tara-temple-tarapith/",
+      "destination": "/temples/tara-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/dakshineswar-kali-temple/",
+      "destination": "/temples/dakshineswar-kali-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/vindhyachal-temple/",
+      "destination": "/temples/vindhyachal-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel-category/swaminarayan-akshardham-mandir/",
+      "destination": "/temples/swaminarayan-akshardham-mandir-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/gangotri-temple/",
+      "destination": "/temples/gangotri-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel/bhimashankar-temple/",
+      "destination": "/temples/bhimashankar-jyotirlinga-temple",
+      "permanent": true
+    },
+    {
+      "source": "/travel-category/padmanabhaswamy-temple/",
+      "destination": "/temples/padmanabhaswamy-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/chamundeshwari-temple/",
+      "destination": "/temples/chamundeshwari-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/sabarimala-sastha-temple/",
+      "destination": "/temples/sabarimala-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/naina-devi-temple/",
+      "destination": "/temples/naina-devi-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/mahakaleshwar-jyotirlinga/",
+      "destination": "/temples/mahakaleshwar-jyotirlinga-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/banke-bihari-temple/",
+      "destination": "/temples/banke-bihari-temple",
+      "permanent": true
+    },
+    {
+      "source": "/tour/neelkanth-mahadev-temple/",
+      "destination": "/temples/neelkanth-mahadev-temple",
+      "permanent": true
+    }
+  ],
+  "blocks": [
+    {
+      "source": "/pandit-in-nashik/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/pandit-in-rishikesh/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/pandit-in-yamunotri/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/ttbm_places/gendarmenmarkt-taubenstr/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel-organizer/jagannath-yatra-packages/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/elementor-hf/home-duplicate-147/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel-category/iskcon-mayapur/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/crm-login",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel-category/varadharaja-perumal-temple/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel-category/udupi-sri-krishna-matha/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/wp-admin/admin.php",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel-category/mahakaleshwar-jyotirlinga/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel-category/chamundeshwari-temple/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/product/68e36caf94276/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel-category/swaminarayan-akshardham-mandir/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/elementor-hf/my-account-4/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/elementor-hf/vrindavan-yatra-2/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/product/68e1094555784/feed/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel/shodashopachar-puja-kedarnath/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/wp-includes/css/dashicons.min.css?ver=6.9,https://namandarshan.com/wp-includes/js/tinymce/skins/wordpress/wp-content.css?ver%3D6.9",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/wp-admin/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/tour/baidyanath-temple/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/tour/badrinath-temple/",
+      "statusCode": 410,
+      "destination": "/"
+    },
+    {
+      "source": "/elementor-hf/home1-2-2/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/ttbm_guide/rabiul/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/wp-includes/js/wp-emoji-release.min.js?ver=6.9",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/elementor-hf/header/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/tour/kamakhyay-temple/",
+      "statusCode": 410,
+      "destination": "/"
+    },
+    {
+      "source": "/wp-content/uploads/*",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/travel/vrindavan-yatra-package-2/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/yatra-specials/",
+      "statusCode": 404,
+      "destination": "/404"
+    },
+    {
+      "source": "/elementor-hf/footer/",
+      "statusCode": 404,
+      "destination": "/404"
+    }
+  ]
+}

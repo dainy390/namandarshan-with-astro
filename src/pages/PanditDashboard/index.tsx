@@ -1,0 +1,562 @@
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  AlertCircle,
+  CalendarCheck,
+  CheckCircle2,
+  Clock3,
+  IndianRupee,
+  MessageCircle,
+  PhoneCall,
+  RefreshCw,
+  Search,
+  LogOut,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+import { getApiUrl, readJsonResponse } from "@/utils/api";
+import { useAuth } from "@/context/AuthContext";
+
+type RangeOption = "7d" | "30d" | "90d" | "all";
+
+interface DashboardTotals {
+  totalBookings: number;
+  callBookings: number;
+  chatBookings: number;
+  completedBookings: number;
+  activeBookings: number;
+  totalMinutes: number;
+  earnings: number;
+  completedEarnings: number;
+  averageBookingValue: number;
+}
+
+interface ModeSummary {
+  bookings: number;
+  minutes: number;
+  earnings: number;
+}
+
+interface DailySummary {
+  date: string;
+  callBookings: number;
+  chatBookings: number;
+  bookings: number;
+  minutes: number;
+  earnings: number;
+}
+
+interface RecentBooking {
+  bookingId: string;
+  astrologerId: string;
+  astrologerName: string;
+  customerName: string;
+  customerEmail?: string;
+  concern?: string;
+  mode: "chat" | "call";
+  durationMinutes: number;
+  earnings: number;
+  paymentStatus: string;
+  status: string;
+  bookedAt: string | null;
+}
+
+interface PanditDashboardResponse {
+  success: boolean;
+  message?: string;
+  generatedAt: string;
+  scope: {
+    panditId: string | null;
+    panditName: string | null;
+    authMode: string;
+    range: RangeOption;
+  };
+  totals: DashboardTotals;
+  byMode: {
+    call: ModeSummary;
+    chat: ModeSummary;
+  };
+  daily: DailySummary[];
+  recentBookings: RecentBooking[];
+}
+
+const ranges: Array<{ label: string; value: RangeOption }> = [
+  { label: "7D", value: "7d" },
+  { label: "30D", value: "30d" },
+  { label: "90D", value: "90d" },
+  { label: "All", value: "all" },
+];
+
+const emptyTotals: DashboardTotals = {
+  totalBookings: 0,
+  callBookings: 0,
+  chatBookings: 0,
+  completedBookings: 0,
+  activeBookings: 0,
+  totalMinutes: 0,
+  earnings: 0,
+  completedEarnings: 0,
+  averageBookingValue: 0,
+};
+
+const emptyMode: ModeSummary = {
+  bookings: 0,
+  minutes: 0,
+  earnings: 0,
+};
+
+const currency = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  maximumFractionDigits: 0,
+});
+
+const compactNumber = new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: 0,
+});
+
+function isRange(value: string | null): value is RangeOption {
+  return value === "7d" || value === "30d" || value === "90d" || value === "all";
+}
+
+function formatDate(value: string | null) {
+  if (!value) return "Not scheduled";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not scheduled";
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatDayLabel(value: string) {
+  if (value === "unscheduled") return "NA";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+}
+
+function statusClass(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized === "completed") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (normalized === "active") return "bg-blue-50 text-blue-700 border-blue-200";
+  if (normalized === "failed" || normalized === "cancelled") return "bg-rose-50 text-rose-700 border-rose-200";
+  return "bg-amber-50 text-amber-700 border-amber-200";
+}
+
+function modeClass(mode: string) {
+  return mode === "call"
+    ? "bg-sky-50 text-sky-700 border-sky-200"
+    : "bg-emerald-50 text-emerald-700 border-emerald-200";
+}
+
+const MetricCard = ({
+  title,
+  value,
+  helper,
+  icon: Icon,
+  accent,
+}: {
+  title: string;
+  value: string;
+  helper: string;
+  icon: LucideIcon;
+  accent: string;
+}) => (
+  <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-slate-500">{title}</p>
+        <p className="mt-3 text-2xl font-bold text-slate-950">{value}</p>
+        <p className="mt-2 text-sm text-slate-500">{helper}</p>
+      </div>
+      <div className={`rounded-lg p-3 ${accent}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+    </div>
+  </section>
+);
+
+const PanditDashboard = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rangeParam = searchParams.get("range");
+  const range: RangeOption = isRange(rangeParam) ? rangeParam : "30d";
+  const panditId = searchParams.get("panditId")?.trim() || "";
+  const [panditIdDraft, setPanditIdDraft] = useState(panditId);
+  const [data, setData] = useState<PanditDashboardResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { user, isUserAuthenticated, isLoading: authLoading, logoutUser } = useAuth();
+
+  useEffect(() => {
+    setPanditIdDraft(panditId);
+  }, [panditId]);
+
+  const updateParams = useCallback(
+    (next: { range?: RangeOption; panditId?: string }) => {
+      const params = new URLSearchParams(searchParams);
+      if (next.range) params.set("range", next.range);
+      if (Object.prototype.hasOwnProperty.call(next, "panditId")) {
+        const nextPanditId = next.panditId?.trim() || "";
+        if (nextPanditId) params.set("panditId", nextPanditId);
+        else params.delete("panditId");
+      }
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
+
+  const loadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({ range });
+      if (panditId) params.set("panditId", panditId);
+
+      const token = localStorage.getItem("userToken");
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await fetch(getApiUrl(`/api/pandit-dashboard/summary?${params.toString()}`), {
+        headers,
+      });
+      const payload = await readJsonResponse<PanditDashboardResponse>(response);
+
+      if (!response.ok || !payload.success) {
+        throw new Error(payload.message || "Unable to load dashboard.");
+      }
+
+      setData(payload);
+    } catch (loadError: any) {
+      setError(loadError?.message || "Unable to load dashboard.");
+      setData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [panditId, range]);
+
+  useEffect(() => {
+    if (!authLoading && !isUserAuthenticated) {
+      navigate('/login?mode=login&role=pandit&redirect=%2Fpandit-dashboard', { replace: true });
+      return;
+    }
+
+    if (!authLoading && user && !['pandit', 'astrologer'].includes(user.role || '')) {
+      navigate('/login?mode=login&role=pandit&redirect=%2Fpandit-dashboard', { replace: true });
+      return;
+    }
+
+    loadDashboard();
+  }, [authLoading, isUserAuthenticated, loadDashboard, navigate, user]);
+
+  const totals = data?.totals || emptyTotals;
+  const byMode = data?.byMode || { call: emptyMode, chat: emptyMode };
+  const visibleDaily = useMemo(() => (data?.daily || []).slice(-14), [data?.daily]);
+  const dashboardLabel = data?.scope.panditName || user?.name || (panditId ? "Pandit" : "All pandits");
+  const maxDailyBookings = Math.max(1, ...visibleDaily.map((item) => item.bookings));
+  const completionRate =
+    totals.totalBookings > 0 ? Math.round((totals.completedBookings / totals.totalBookings) * 100) : 0;
+
+  const applyPanditFilter = (event: FormEvent) => {
+    event.preventDefault();
+    updateParams({ panditId: panditIdDraft });
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    navigate("/", { replace: true });
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-950">
+      <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div>
+            <p className="text-sm font-semibold uppercase text-orange-600">Naman Darshan</p>
+            <h1 className="text-2xl font-bold">Pandit Dashboard</h1>
+            <p className="text-sm text-slate-500">
+              {dashboardLabel}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1">
+              {ranges.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  aria-pressed={range === item.value}
+                  onClick={() => updateParams({ range: item.value })}
+                  className={`h-9 min-w-14 rounded-md px-3 text-sm font-semibold transition ${
+                    range === item.value
+                      ? "bg-white text-slate-950 shadow-sm"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={applyPanditFilter} className="flex min-w-0 items-center gap-2">
+              <label htmlFor="pandit-id" className="sr-only">
+                Pandit ID
+              </label>
+              <input
+                id="pandit-id"
+                value={panditIdDraft}
+                onChange={(event) => setPanditIdDraft(event.target.value)}
+                placeholder="Pandit name or ID"
+                className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 md:w-44"
+              />
+              <button
+                type="submit"
+                title="Apply pandit filter"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white transition hover:bg-slate-800"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                title="Refresh dashboard"
+                onClick={loadDashboard}
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100"
+              >
+                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+              </button>
+              <button
+                type="button"
+                title="Logout"
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+        {error && (
+          <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-rose-700">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <p className="text-sm font-medium">{error}</p>
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            title="Total Earnings"
+            value={currency.format(totals.earnings)}
+            helper={`${currency.format(totals.completedEarnings)} from completed sessions`}
+            icon={IndianRupee}
+            accent="bg-emerald-50 text-emerald-700"
+          />
+          <MetricCard
+            title="Call Bookings"
+            value={compactNumber.format(totals.callBookings)}
+            helper={`${compactNumber.format(byMode.call.minutes)} call minutes`}
+            icon={PhoneCall}
+            accent="bg-sky-50 text-sky-700"
+          />
+          <MetricCard
+            title="Chat Bookings"
+            value={compactNumber.format(totals.chatBookings)}
+            helper={`${compactNumber.format(byMode.chat.minutes)} chat minutes`}
+            icon={MessageCircle}
+            accent="bg-violet-50 text-violet-700"
+          />
+          <MetricCard
+            title="Completion Rate"
+            value={`${completionRate}%`}
+            helper={`${compactNumber.format(totals.activeBookings)} active or confirmed`}
+            icon={CheckCircle2}
+            accent="bg-amber-50 text-amber-700"
+          />
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]">
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold">Booking Trend</h2>
+                <p className="text-sm text-slate-500">Calls and chats by booking date</p>
+              </div>
+              <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
+                  Call
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  Chat
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 h-72 overflow-x-auto">
+              {visibleDaily.length > 0 ? (
+                <div className="grid h-full min-w-[640px] grid-cols-[repeat(14,minmax(0,1fr))] items-end gap-3">
+                  {visibleDaily.map((item) => {
+                    const height = item.bookings > 0 ? Math.max(10, (item.bookings / maxDailyBookings) * 100) : 0;
+                    const callHeight = item.bookings > 0 ? (item.callBookings / item.bookings) * 100 : 0;
+                    const chatHeight = item.bookings > 0 ? (item.chatBookings / item.bookings) * 100 : 0;
+
+                    return (
+                      <div key={item.date} className="flex h-full flex-col justify-end gap-2">
+                        <div className="flex h-52 items-end rounded-md bg-slate-100 px-1.5 pb-1.5">
+                          <div
+                            className="flex w-full flex-col overflow-hidden rounded bg-slate-200"
+                            style={{ height: `${height}%` }}
+                            title={`${item.bookings} bookings, ${currency.format(item.earnings)}`}
+                          >
+                            <div style={{ height: `${chatHeight}%` }} className="bg-emerald-500" />
+                            <div style={{ height: `${callHeight}%` }} className="bg-sky-500" />
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs font-semibold text-slate-700">{item.bookings}</p>
+                          <p className="text-[11px] text-slate-500">{formatDayLabel(item.date)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-slate-200 text-sm font-medium text-slate-500">
+                  No bookings in this range
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-bold">Mode Split</h2>
+            <div className="mt-5 space-y-4">
+              {(["call", "chat"] as const).map((mode) => {
+                const summary = byMode[mode];
+                const Icon = mode === "call" ? PhoneCall : MessageCircle;
+                const total = Math.max(1, totals.totalBookings);
+                const width = Math.max(4, (summary.bookings / total) * 100);
+
+                return (
+                  <div key={mode} className="rounded-lg border border-slate-200 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`rounded-lg p-2 ${mode === "call" ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"}`}>
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold capitalize">{mode}</p>
+                          <p className="text-sm text-slate-500">{compactNumber.format(summary.minutes)} minutes</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">{compactNumber.format(summary.bookings)}</p>
+                        <p className="text-sm text-slate-500">{currency.format(summary.earnings)}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className={`h-full rounded-full ${mode === "call" ? "bg-sky-500" : "bg-emerald-500"}`}
+                        style={{ width: `${summary.bookings > 0 ? width : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-slate-200 p-4">
+                <CalendarCheck className="h-5 w-5 text-orange-600" />
+                <p className="mt-3 text-2xl font-bold">{compactNumber.format(totals.totalBookings)}</p>
+                <p className="text-sm text-slate-500">Total bookings</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-4">
+                <Clock3 className="h-5 w-5 text-blue-600" />
+                <p className="mt-3 text-2xl font-bold">{compactNumber.format(totals.totalMinutes)}</p>
+                <p className="text-sm text-slate-500">Total minutes</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold">Recent Bookings</h2>
+              <p className="text-sm text-slate-500">Latest call and chat sessions from MongoDB</p>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">
+              <Users className="h-4 w-4" />
+              {data?.scope.panditId || "All"}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="px-5 py-3 font-semibold">Booking</th>
+                  <th className="px-5 py-3 font-semibold">Customer</th>
+                  <th className="px-5 py-3 font-semibold">Mode</th>
+                  <th className="px-5 py-3 font-semibold">Status</th>
+                  <th className="px-5 py-3 font-semibold">Duration</th>
+                  <th className="px-5 py-3 font-semibold">Earnings</th>
+                  <th className="px-5 py-3 font-semibold">Booked At</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data?.recentBookings?.length ? (
+                  data.recentBookings.map((booking) => (
+                    <tr key={booking.bookingId} className="hover:bg-slate-50">
+                      <td className="px-5 py-4">
+                        <p className="font-semibold text-slate-950">{booking.bookingId}</p>
+                        <p className="max-w-72 truncate text-slate-500">{booking.concern || booking.astrologerName}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="font-medium text-slate-800">{booking.customerName || "Customer"}</p>
+                        <p className="text-slate-500">{booking.customerEmail || "No email"}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold capitalize ${modeClass(booking.mode)}`}>
+                          {booking.mode}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold capitalize ${statusClass(booking.status)}`}>
+                          {booking.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 font-medium">{compactNumber.format(booking.durationMinutes)} min</td>
+                      <td className="px-5 py-4 font-bold text-slate-950">{currency.format(booking.earnings)}</td>
+                      <td className="px-5 py-4 text-slate-600">{formatDate(booking.bookedAt)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-12 text-center text-sm font-medium text-slate-500">
+                      {isLoading ? "Loading bookings..." : "No bookings found"}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+};
+
+export default PanditDashboard;

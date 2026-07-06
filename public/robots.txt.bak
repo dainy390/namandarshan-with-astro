@@ -1,0 +1,30 @@
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+
+User-agent: *
+Allow: /
+
+Disallow: /product/
+Disallow: /author/
+Disallow: /?s=
+Disallow: /my-account
+Disallow: /feed/
+Disallow: /*/feed/
+Disallow: /*uc_content_tabs*
+Disallow: /wp-json/
+Disallow: /langs/
+
+Allow: /wp-content/uploads/
+
+
+Sitemap: https://namandarshan.com/sitemap.xml

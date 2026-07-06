@@ -1,0 +1,597 @@
+[
+  {
+    "source": "/travel-category/iskcon-mayapur",
+    "destination": "/temples/iskcon-temple",
+    "permanent": true
+  },
+  {
+    "source": "/kanipakam-varasiddhi-vinayaka-swamy-temple-puja",
+    "destination": "/puja/Sathya-Pramanam-Oath-of-Truth",
+    "permanent": true
+  },
+  {
+    "source": "/neelkanth-mahadev-prasadam-online",
+    "destination": "/prasadam/shree-neelkanth-mahadev-temple-bhang-prasad",
+    "permanent": true
+  },
+  {
+    "source": "/prasadam/the-most-traditional-and-sacred-offering-is-the-neelkanth-maha-prasad-dry-fruit-mishri--panchamrit-and-bael-patra-wood-apple-leaves-prasadam",
+    "destination": "/prasadam/shree-neelkanth-mahadev-temple-bhang-prasad",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/chamundeshwari-temple",
+    "destination": "/temples/chamundeshwari-temple",
+    "permanent": true
+  },
+  {
+    "source": "/puja/ /linga-bhairavi-devi-abhishekam-puja",
+    "destination": "/puja/linga-bhairavi-devi-abhishekam-puja",
+    "permanent": true
+  },
+  {
+    "source": "/puja/%20/linga-bhairavi-devi-abhishekam-puja",
+    "destination": "/puja/linga-bhairavi-devi-abhishekam-puja",
+    "permanent": true
+  },
+  {
+    "source": "/travel/ramanathaswamy-temple",
+    "destination": "/temples/ramanathaswamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/meenakshi-temple",
+    "destination": "/temples/meenakshi-temple",
+    "permanent": true
+  },
+  {
+    "source": "/malyadri-lakshmi-narasimha-swamy-temple-prasadam",
+    "destination": "/prasadam/sri-malyadri-lakshmi-narasimha-swamy-temple-prasadam",
+    "permanent": true
+  },
+  {
+    "source": "/prasadam/malyadri-lakshmi-narasimha-swamy-temple-prasadam",
+    "destination": "/prasadam/sri-malyadri-lakshmi-narasimha-swamy-temple-prasadam",
+    "permanent": true
+  },
+  {
+    "source": "/badrinath-seva-maha-abhishek-shringar-vip-darshan",
+    "destination": "/darshan/badrinath-temple-darshan-vipdarshan",
+    "permanent": true
+  },
+  {
+    "source": "/ram-bhakti-utsav-at-ram-mandir-ayodhya-winter-darshan",
+    "destination": "/darshan/ram-mandir-darshan-vipdarshan",
+    "permanent": true
+  },
+  {
+    "source": "/travel/adiyogi-shiva-temple",
+    "destination": "/temples/adiyogi-shiva-temple",
+    "permanent": true
+  },
+  {
+    "source": "/temples/vaishno-devi-temple/-",
+    "destination": "/temples/vaishno-devi-temple",
+    "permanent": true
+  },
+  {
+    "source": "/tirupati-balaji-temple-devotional-darshan-experience-winter-season",
+    "destination": "/darshan/tirupati-balaji-temple-vipdarshan",
+    "permanent": true
+  },
+  {
+    "source": "/travel/jagannath-yatra-packages",
+    "destination": "/jagannath-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/kanipakam-varasiddhi-vinayaka-swamy-temple-prasadam",
+    "destination": "/prasadam",
+    "permanent": true
+  },
+  {
+    "source": "/malyadri-lakshmi-narasimha-swamy-temple-puja",
+    "destination": "/temples/sri-malyadri-lakshmi-narasimha-swamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/uttarakhand-temple",
+    "destination": "/temples",
+    "permanent": true
+  },
+  {
+    "source": "/vaishno-devi-temple/-",
+    "destination": "/temples/vaishno-devi-temple",
+    "permanent": true
+  },
+  {
+    "source": "/5-lingaraj-temple-bhubaneswar-odisha",
+    "destination": "/temples/lingaraj-temple",
+    "permanent": true
+  },
+  {
+    "source": "/uttar-pradesh-temple",
+    "destination": "/temples",
+    "permanent": true
+  },
+  {
+    "source": "/my-trips-login",
+    "destination": "/login",
+    "permanent": true
+  },
+  {
+    "source": "/blog/barsana-lathmar-holi-guide",
+    "destination": "/blog/lathmar-holi-barsana-2026-darshan-guide",
+    "permanent": true
+  },
+  {
+    "source": "/badrinath-temple-darshan-2026-timings-vip-pass",
+    "destination": "/temples/badrinath-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-organizer/jagannath-yatra-packages",
+    "destination": "/jagannath-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel/sai-baba-mandir",
+    "destination": "/shirdi-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/thillai-nataraja-temple",
+    "destination": "/temples/thillai-nataraja-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/jagannath-temple",
+    "destination": "/yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel/virupaksha-temple-hampi-karnataka",
+    "destination": "/yatra",
+    "permanent": true
+  },
+  {
+    "source": "/mahakal_blog",
+    "destination": "/blogs",
+    "permanent": true
+  },
+  {
+    "source": "/mata-vaishno-devi-2",
+    "destination": "/temples/vaishno-devi-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/lingaraj-temple",
+    "destination": "/temples/lingaraj-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/naina-devi-temple",
+    "destination": "/temples/naina-devi-temple",
+    "permanent": true
+  },
+  {
+    "source": "/ranganathaswamy-temple",
+    "destination": "/temples/ranganathaswamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/iskon-mayapur",
+    "destination": "/temples/iskcon-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/badrinath-temple",
+    "destination": "/temples/badrinath-temple",
+    "permanent": true
+  },
+  {
+    "source": "/trimbakeshwar-jyotirlinga-nashik-maharashtra",
+    "destination": "/temples/trimbakeshwar-jyotirlinga-temple",
+    "permanent": true
+  },
+  {
+    "source": "/uttarakhand-temples",
+    "destination": "/temples",
+    "permanent": true
+  },
+  {
+    "source": "/neelkanth-mahadev-temple-vip-darshan-rishikesh",
+    "destination": "/temples/neelkanth-mahadev-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/virupaksha-temple",
+    "destination": "/temples/virupaksha-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/guruvayur-temple",
+    "destination": "/temples/guruvayur-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/kedarnath-yatra-package",
+    "destination": "/kedarnath-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel/swaminarayan-akshardham-mandir",
+    "destination": "/temples/swaminarayan-akshardham-mandir-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/lingaraj-temple",
+    "destination": "/temples/lingaraj-temple",
+    "permanent": true
+  },
+  {
+    "source": "/puja-booking-online",
+    "destination": "/puja",
+    "permanent": true
+  },
+  {
+    "source": "/kashi-darshan",
+    "destination": "/darshan/kashi-vishwanath-temple-vipdarshan",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/airavatesvara-temple",
+    "destination": "/temples/airavatesvara-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/parasnath-digambar-jain-temple/feed",
+    "destination": "/temples/parasnath-digambar-jain-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/vindhyachal-temple",
+    "destination": "/temples/vindhyachal-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/sri-venkateswara-swami-temple",
+    "destination": "/temples/sri-venkateswara-swami-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/birla-mandir",
+    "destination": "/temples/birla-mandir-temple",
+    "permanent": true
+  },
+  {
+    "source": "/ttbm_tour_tag/bhimashankar-rudrabhishek-puja",
+    "destination": "/puja/rudrabhishek-puja",
+    "permanent": true
+  },
+  {
+    "source": "/travel/shirdi-yatra-packages",
+    "destination": "/shirdi-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/penchalakona-lakshmi-narasimha-swamy-temple-darshan",
+    "destination": "/temples/penchalakona-lakshmi-narasimha-swamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/dakshineswar-kali-temple",
+    "destination": "/temples/dakshineswar-kali-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/ayodhya-yatra-packages",
+    "destination": "/ayodhya-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/palani-murugan-temple",
+    "destination": "/temples/palani-murugan-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/ramanathaswamy-temple",
+    "destination": "/temples/ramanathaswamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/live-darshan-badrinath",
+    "destination": "/live-darshan/badrinath-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/kanyakumari-amman-temple",
+    "destination": "/temples/kanyakumari-bhagavathy-amman-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/trimbakeshwar-jyotirlinga",
+    "destination": "/temples/trimbakeshwar-jyotirlinga-temple",
+    "permanent": true
+  },
+  {
+    "source": "/malyadri-lakshmi-narasimha-swamy-temple-darshan",
+    "destination": "/temples/sri-malyadri-lakshmi-narasimha-swamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/kanipakam-varasiddhi-vinayaka-swamy-temple-darshan",
+    "destination": "/temples",
+    "permanent": true
+  },
+  {
+    "source": "/travel/padmanabhaswamy-temple",
+    "destination": "/temples/padmanabhaswamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/blog/golden-temple-yatra/feed",
+    "destination": "/blog/golden-temple-amritsar-history-langar-guide",
+    "permanent": true
+  },
+  {
+    "source": "/travel/mehandipur-balaji-temple",
+    "destination": "/temples/mehandipur-balaji-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/varadharaja-perumal-temple",
+    "destination": "/temples/varadharaja-perumal-temple",
+    "permanent": true
+  },
+  {
+    "source": "/2024/02/14/golden-temple-yatra",
+    "destination": "/blog/golden-temple-amritsar-history-langar-guide",
+    "permanent": true
+  },
+  {
+    "source": "/blog/golden-temple-yatra",
+    "destination": "/blog/golden-temple-amritsar-history-langar-guide",
+    "permanent": true
+  },
+  {
+    "source": "/tour/kedarnath-yatra-package",
+    "destination": "/kedarnath-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/baidyanath-temple",
+    "destination": "/temples/baidyanath-temple",
+    "permanent": true
+  },
+  {
+    "source": "/tour/yamunotri-temple",
+    "destination": "/temples/yamunotri-temple",
+    "permanent": true
+  },
+  {
+    "source": "/tour/kedarnath-temple",
+    "destination": "/temples/kedarnath-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/banke-bihari-temple",
+    "destination": "/temples/banke-bihari-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/parasnath-digambar-jain-temple",
+    "destination": "/temples/parasnath-digambar-jain-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/tara-temple-tarapith",
+    "destination": "/temples/tara-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/yamunotri-temple",
+    "destination": "/temples/yamunotri-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/belur-math",
+    "destination": "/temples/belur-math-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/kanyakumari-bhagavathy-amman",
+    "destination": "/temples/kanyakumari-bhagavathy-amman-temple",
+    "permanent": true
+  },
+  {
+    "source": "/puja-booking",
+    "destination": "/puja",
+    "permanent": true
+  },
+  {
+    "source": "/tour/ayodhya-yatra-packages",
+    "destination": "/ayodhya-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/kashi-vishwanath-temple-varanasi",
+    "destination": "/temples/kashi-vishwanath-temple",
+    "permanent": true
+  },
+  {
+    "source": "/tour/sri-venkateswara-swami-temple",
+    "destination": "/temples/sri-venkateswara-swami-temple",
+    "permanent": true
+  },
+  {
+    "source": "/package/ayodhya-yatra",
+    "destination": "/ayodhya-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/blog/dauji-huranga-baldeo-guide",
+    "destination": "/blog/dauji-huranga-2026-baldeo-darshan-guide-tips",
+    "permanent": true
+  },
+  {
+    "source": "/blog/phalen-gaon-fire-holi-guide",
+    "destination": "/blog/phalen-gaon-ki-holi-2026-fire-ritual-travel-guide-tips",
+    "permanent": true
+  },
+  {
+    "source": "/blog/chhadimar-holi-gokul-guide",
+    "destination": "/blog/chhadimar-holi-gokul-2026-darshan-guide-tips",
+    "permanent": true
+  },
+  {
+    "source": "/travel/kedarnath-platinum-yatra-package",
+    "destination": "/kedarnath-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/mahakaleshwar-temple-ujjain-shiva-bhakti-agni-rituals-winter-darshan",
+    "destination": "/darshan/mahakaleshwar-jyotirlinga-ujjain-vipdarshan",
+    "permanent": true
+  },
+  {
+    "source": "/travel/laxminarayan-temple-birla-mandir",
+    "destination": "/temples/laxminarayan-temple-birla-mandir-temple",
+    "permanent": true
+  },
+  {
+    "source": "/jagannath_blog",
+    "destination": "/blogs/mysteries-of-jagannath-puri",
+    "permanent": true
+  },
+  {
+    "source": "/travel/dakshineswar-kali-temple",
+    "destination": "/temples/dakshineswar-kali-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-organizer/vrindavan-yatra-package",
+    "destination": "/vrindavan-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/mehandipur-balaji-temple",
+    "destination": "/temples/mehandipur-balaji-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel/chardham-yatra-packages",
+    "destination": "/char-dham-yatra",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/meenakshi-temple",
+    "destination": "/temples/meenakshi-temple",
+    "permanent": true
+  },
+  {
+    "source": "/jyotirlinga",
+    "destination": "/temples",
+    "permanent": true
+  },
+  {
+    "source": "/tour/the-golden-temple",
+    "destination": "/temples/the-golden-temple",
+    "permanent": true
+  },
+  {
+    "source": "/travel-category/jagannath-temple",
+    "destination": "/temples/jagannath-temple",
+    "permanent": true
+  },
+  {
+    "source": "/packages-2",
+    "destination": "/yatra",
+    "permanent": true
+  },
+  {
+    "source": "/penchalakona-lakshmi-narasimha-swamy-temple-prasadam",
+    "destination": "/temples/penchalakona-lakshmi-narasimha-swamy-temple",
+    "permanent": true
+  },
+  {
+    "source": "/chandi-devi-temple-vip-darshan-haridwar",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/Effortless",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/add-ons",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/orchid-grid-2",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/lotus-grid-2",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/ttbm_places/alexanderplatz-alexa",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/ttbm_places/rotes-rathaus-neptune-fountain",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/ttbm_guide/sumon",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/category/uncategorized",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/pages-2",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/elementor-hf/home1-2",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/ttbm_places/brandenburger-tor",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/crm-logout",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/yatra_testing",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/testing",
+    "statusCode": 404,
+    "destination": "/404"
+  },
+  {
+    "source": "/wp-content/plugins/(.*)",
+    "statusCode": 404,
+    "destination": "/404"
+  }
+]

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Naman Darshan</string>
+    <string name="title_activity_main">Naman Darshan</string>
+    <string name="package_name">com.namandarshan.app</string>
+    <string name="custom_url_scheme">com.namandarshan.app</string>
+</resources>

@@ -1,0 +1,294 @@
+{
+    "trailingSlash": false,
+    "headers": [
+        {
+            "source": "/(.*)",
+            "headers": [
+                {
+                    "key": "Content-Security-Policy",
+                    "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://translate.google.com https://translate.googleapis.com https://translate-pa.googleapis.com https://accounts.google.com https://www.gstatic.com https://static.cloudflareinsights.com https://*.google.com https://*.googleapis.com https://connect.facebook.net https://appleid.cdn-apple.com; connect-src 'self' https://api.namandarshan.com wss://api.namandarshan.com http://localhost:5001 ws://localhost:5001 http://52.66.103.126 https://api.razorpay.com https://lumberjack.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://*.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://translate.googleapis.com https://accounts.google.com https://*.googleapis.com https://api.groq.com https://api.dicebear.com https://namandarshan-bucket.s3.ap-south-1.amazonaws.com https://www.facebook.com data:; img-src 'self' data: blob: https: https://res.cloudinary.com https://*.google.com https://api.dicebear.com https://namandarshan-bucket.s3.ap-south-1.amazonaws.com; media-src 'self' blob: data: http://localhost:5001 https://localhost https://namandarshan-bucket.s3.ap-south-1.amazonaws.com https://*.amazonaws.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com https://translate.googleapis.com; font-src 'self' https://fonts.gstatic.com data: https:; frame-src 'self' https://www.googletagmanager.com https://*.googletagmanager.com https://accounts.google.com https://www.youtube.com https://naman-kheel.vercel.app https://cosmic-compass-drab.vercel.app https://www.facebook.com https://appleid.apple.com https://checkout.razorpay.com https://api.razorpay.com https://*.razorpay.com; base-uri 'self'; object-src 'none'; frame-ancestors 'self';"
+                },
+                {
+                    "key": "Cross-Origin-Opener-Policy",
+                    "value": "same-origin-allow-popups"
+                }
+            ]
+        },
+        {
+            "source": "/assets/(.*)",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                }
+            ]
+        },
+        {
+            "source": "/(.*)\\.(webp|jpg|jpeg|png|avif|ico|svg|woff2|woff)$",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                }
+            ]
+        },
+        {
+            "source": "/(.*)\\.(js|css)$",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=31536000, immutable"
+                }
+            ]
+        }
+    ],
+    "redirects": [
+        {
+            "source": "/sitemap_index.xml",
+            "destination": "/sitemap.xml",
+            "permanent": true
+        },
+        {
+            "source": "/product/(.*)",
+            "statusCode": 410,
+            "destination": "/"
+        },
+        {
+            "source": "/author/user/(.*)",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/(.*)-sitemap.xml",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/airavatesvara-temple",
+            "destination": "/temples/airavatesvara-temple",
+            "permanent": true
+        },
+        {
+            "source": "/mahakaleshwar-darshan",
+            "destination": "/temples/mahakaleshwar-darshan",
+            "permanent": true
+        },
+        {
+            "source": "/vindhyachal-temple-mirzapur",
+            "destination": "/temples/vindhyachal-temple-mirzapur",
+            "permanent": true
+        },
+        {
+            "source": "/thillai-nataraja-temple",
+            "destination": "/temples/thillai-nataraja-temple",
+            "permanent": true
+        },
+        {
+            "source": "/kanyakumari-bhagavathy-amman-temple",
+            "destination": "/temples/kanyakumari-bhagavathy-amman-temple",
+            "permanent": true
+        },
+        {
+            "source": "/palani-murugan-temple",
+            "destination": "/temples/palani-murugan-temple",
+            "permanent": true
+        },
+        {
+            "source": "/jagannath-temple",
+            "destination": "/temples/jagannath-temple",
+            "permanent": true
+        },
+        {
+            "source": "/dwarkadhish-temple",
+            "destination": "/temples/dwarkadhish-temple",
+            "permanent": true
+        },
+        {
+            "source": "/buy-mata-vaishno-devi-prasadam-online",
+            "destination": "/temples/buy-mata-vaishno-devi-prasadam-online",
+            "permanent": true
+        },
+        {
+            "source": "/ttbm_guide/shamim",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/penchalakona-lakshmi-narasimha-swamy-temple-puja",
+            "destination": "/temples/penchalakona-lakshmi-narasimha-swamy-temple-puja",
+            "permanent": true
+        },
+        {
+            "source": "/darshan",
+            "destination": "/temples/darshan",
+            "permanent": true
+        },
+        {
+            "source": "/sabarimala-sastha-temple",
+            "destination": "/temples/sabarimala-sastha-temple",
+            "permanent": true
+        },
+        {
+            "source": "/vaishno-devi-temple",
+            "destination": "/temples/vaishno-devi-temple",
+            "permanent": true
+        },
+        {
+            "source": "/live-darshan-ram-mandir",
+            "destination": "/temples/live-darshan-ram-mandir",
+            "permanent": true
+        },
+        {
+            "source": "/shodashopachar-puja-kedarnath",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/kalighat-kali-temple",
+            "destination": "/temples/kalighat-kali-temple",
+            "permanent": true
+        },
+        {
+            "source": "/live-darshan-mahakaleshwar",
+            "destination": "/temples/live-darshan-mahakaleshwar",
+            "permanent": true
+        },
+        {
+            "source": "/badrinath-temple",
+            "destination": "/temples/badrinath-temple",
+            "permanent": true
+        },
+        {
+            "source": "/mahapuja-at-bhimashankar",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/tara-temple-tarapith",
+            "destination": "/temples/tara-temple-tarapith",
+            "permanent": true
+        },
+        {
+            "source": "/temple/sri-potuluri-veera-brahmendra-swamy-matam-vipdarshan",
+            "destination": "/temples/sri-potuluri-veera-brahmendra-swamy-matam-vipdarshan",
+            "permanent": true
+        },
+        {
+            "source": "/palitana-jain-tirth-temple",
+            "destination": "/temples/palitana-jain-tirth-temple",
+            "permanent": true
+        },
+        {
+            "source": "/bhimashankar-jyotirlinga",
+            "destination": "/temples/bhimashankar-jyotirlinga",
+            "permanent": true
+        },
+        {
+            "source": "/live-darshan-golden-temple",
+            "destination": "/temples/live-darshan-golden-temple",
+            "permanent": true
+        },
+        {
+            "source": "/bhimashankar-laghu-rudrabhishek",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/vip-darshan-package",
+            "destination": "/temples/vip-darshan-package",
+            "permanent": true
+        },
+        {
+            "source": "/live-darshan-kedarnath",
+            "destination": "/temples/live-darshan-kedarnath",
+            "permanent": true
+        },
+        {
+            "source": "/gangotri-temple",
+            "destination": "/temples/gangotri-temple",
+            "permanent": true
+        },
+        {
+            "source": "/virupaksha-temple",
+            "destination": "/temples/virupaksha-temple",
+            "permanent": true
+        },
+        {
+            "source": "/haridwar-navgrah-dosh-nivaran-puja",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/parasnath-digambar-jain-temple",
+            "destination": "/temples/parasnath-digambar-jain-temple",
+            "permanent": true
+        },
+        {
+            "source": "/kedartnath-yatra",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/yatra_specials",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/sri-venkateswara-swami-temple",
+            "destination": "/temples/sri-venkateswara-swami-temple",
+            "permanent": true
+        },
+        {
+            "source": "/dwarkadhish-darshan",
+            "destination": "/temples/dwarkadhish-darshan",
+            "permanent": true
+        },
+        {
+            "source": "/banke-bihari-temple",
+            "destination": "/temples/banke-bihari-temple",
+            "permanent": true
+        },
+        {
+            "source": "/adiyogi-shiva-temple",
+            "destination": "/temples/adiyogi-shiva-temple",
+            "permanent": true
+        },
+        {
+            "source": "/puja-rituals",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/panditji",
+            "statusCode": 404,
+            "destination": "/404"
+        },
+        {
+            "source": "/sri-venkateswara-swami-temple-tirumala",
+            "destination": "/temples/sri-venkateswara-swami-temple-tirumala",
+            "permanent": true
+        }
+    ],
+    "rewrites": [
+        {
+            "source": "/sitemap.xml",
+            "destination": "https://api.namandarshan.com/sitemap.xml"
+        },
+        {
+            "source": "/sitemap-:slug.xml",
+            "destination": "https://api.namandarshan.com/sitemap-:slug.xml"
+        },
+        {
+            "source": "/api/(.*)",
+            "destination": "/backend/api/index.js"
+        },
+        {
+            "source": "/ai/(.*)",
+            "destination": "/backend/api/index.js"
+        },
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}
