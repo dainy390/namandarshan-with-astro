@@ -164,21 +164,39 @@ app.use((req, res, next) => {
     next();
 });
 const PORT = process.env.PORT || 5001;
+const DEFAULT_ALLOWED_ORIGINS = [
+    'http://localhost:3000',
+    'http://localhost:8080',
+    'https://namandarshan.com',
+    'https://www.namandarshan.com',
+    'https://namandarshan-testing.vercel.app',
+    'https://namandarshan-astrotalk-testing-backend.onrender.com',
+];
+
+const getAllowedOrigins = () => {
+    const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+        .split(',')
+        .map(origin => origin.trim())
+        .filter(Boolean);
+
+    return new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins]);
+};
+
+const isAllowedPreviewOrigin = (origin) => {
+    try {
+        const { hostname, protocol } = new URL(origin);
+        return protocol === 'https:' && hostname.endsWith('.amplifyapp.com');
+    } catch {
+        return false;
+    }
+};
 
 // Middleware
 app.use(cors({
     origin: function (origin, callback) {
-        // Sacred Whitelist for Devotee Wall
-        const allowedOrigins = [
-            'http://localhost:3000',
-            'http://localhost:8080',
-            'https://namandarshan.com',
-            'https://www.namandarshan.com',
-            'https://namandarshan-astrotalk-testing-backend.onrender.com',
-        ];
+        const allowedOrigins = getAllowedOrigins();
 
-        // Allow any amplifyapp.com subdomain
-        if (!origin || allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.amplifyapp.com')) {
+        if (!origin || allowedOrigins.has(origin) || isAllowedPreviewOrigin(origin)) {
             callback(null, true);
         } else {
             console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
