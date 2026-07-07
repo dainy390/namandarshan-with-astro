@@ -49,7 +49,7 @@ function findFuzzyMatch(slugParam) {
 
 async function test() {
     try {
-        const res = await fetch("https://api.namandarshan.com/api/temples");
+        const res = await fetch("https://namandarshan-astrotalk-testing-backend.onrender.com/api/temples");
         const temples = await res.json();
         
         let successCount = 0;

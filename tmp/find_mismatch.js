@@ -4,7 +4,7 @@ const darshans = JSON.parse(fs.readFileSync("tmp/darshans.json", "utf8"));
 
 async function findMatches() {
     try {
-        const res = await fetch("https://api.namandarshan.com/api/temples");
+        const res = await fetch("https://namandarshan-astrotalk-testing-backend.onrender.com/api/temples");
         const temples = await res.json();
         
         console.log(`Checking ${temples.length} temples against ${darshans.length} darshans...`);

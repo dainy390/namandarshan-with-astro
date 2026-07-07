@@ -45,7 +45,7 @@ const TEMPLE_TO_DARSHAN_SLUG_MAP = {
 
 async function test() {
     try {
-        const res = await fetch("https://api.namandarshan.com/api/temples");
+        const res = await fetch("https://namandarshan-astrotalk-testing-backend.onrender.com/api/temples");
         const temples = await res.json();
         
         console.log("Checking disabled temples post-mapping...");
@@ -55,7 +55,7 @@ async function test() {
         for (const temple of temples) {
             const mappedSlug = TEMPLE_TO_DARSHAN_SLUG_MAP[temple.slug] || temple.slug;
             
-            const darshanRes = await fetch(`https://api.namandarshan.com/api/darshan/${mappedSlug}`);
+            const darshanRes = await fetch(`https://namandarshan-astrotalk-testing-backend.onrender.com/api/darshan/${mappedSlug}`);
             if (darshanRes.ok) {
                 const data = await darshanRes.json();
                 if (data && !data.message && data.name) {

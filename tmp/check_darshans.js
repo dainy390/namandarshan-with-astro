@@ -3,7 +3,7 @@ import fs from 'fs';
 async function checkTemples() {
     try {
         console.log("Fetching temples...");
-        const templesRes = await fetch("https://api.namandarshan.com/api/temples");
+        const templesRes = await fetch("https://namandarshan-astrotalk-testing-backend.onrender.com/api/temples");
         if (!templesRes.ok) {
             console.error("Failed to fetch temples status:", templesRes.status);
             return;
@@ -44,7 +44,7 @@ async function checkTemples() {
             }
 
             // Fetch darshan
-            const darshanRes = await fetch(`https://api.namandarshan.com/api/darshan/${darshanSlug}`);
+            const darshanRes = await fetch(`https://namandarshan-astrotalk-testing-backend.onrender.com/api/darshan/${darshanSlug}`);
             if (darshanRes.ok) {
                 const darshanData = await darshanRes.json();
                 if (darshanData.message || !darshanData.name) {

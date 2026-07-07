@@ -1,5 +1,5 @@
 const DEFAULT_DEV_API_BASE_URL = "http://localhost:5001";
-const DEFAULT_PROD_API_BASE_URL = "https://api.namandarshan.com";
+const DEFAULT_PROD_API_BASE_URL = "https://namandarshan-astrotalk-testing-backend.onrender.com";
 const LEGACY_PROD_API_BASE_URL = "http://52.66.103.126:5001";
 
 const trimTrailingSlash = (value: string) => value.replace(/\/$/, "");
@@ -24,7 +24,7 @@ export const getApiBaseUrl = () => {
 
     // 2. Development Mode (Localhost)
     const devUrl = trimTrailingSlash(envBaseUrl || DEFAULT_DEV_API_BASE_URL);
-    // const devUrl = "https://api.namandarshan.com";
+    // const devUrl = "https://namandarshan-astrotalk-testing-backend.onrender.com";
     return devUrl;
 };
 

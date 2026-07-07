@@ -174,7 +174,7 @@ app.use(cors({
             'http://localhost:8080',
             'https://namandarshan.com',
             'https://www.namandarshan.com',
-            'https://api.namandarshan.com'
+            'https://namandarshan-astrotalk-testing-backend.onrender.com',
         ];
 
         // Allow any amplifyapp.com subdomain
