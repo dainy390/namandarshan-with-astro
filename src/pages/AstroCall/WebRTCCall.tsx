@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Mic, MicOff, PhoneOff, RefreshCw, Video, VideoOff } from "lucide-react";
+import { Mic, MicOff, PhoneOff, RefreshCw, Star, Video, VideoOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useSocket } from "@/context/SocketContext";
 import { useWallet } from "@/context/WalletContext";
 import { canStartConsultation } from "@/utils/consultationAccess";
-import { finalizeWalletConsultationSession } from "@/utils/consultationSession";
+import { finalizeWalletConsultationSession, submitConsultationFeedback } from "@/utils/consultationSession";
 
 interface WebRTCCallProps {
   bookingId?: string;
@@ -60,6 +60,10 @@ const WebRTCCall = ({
   const [isCameraOff, setIsCameraOff] = useState(false);
   const [remoteName, setRemoteName] = useState("Waiting for participant");
   const [callEnded, setCallEnded] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
 
   const finalizeSession = useCallback(async () => {
     if (isPandit || !bookingId || hasFinalizedRef.current) return;
@@ -182,14 +186,20 @@ const WebRTCCall = ({
 
   const endCall = useCallback(
     async (notifyPeer = true) => {
+      if (callEnded) return;
       setCallEnded(true);
       leaveSocketRoom(notifyPeer);
       closePeerConnection();
       stopLocalMedia();
       await finalizeSession();
-      navigate(isPandit ? "/pandit-dashboard" : "/devotee-dashboard", { replace: true });
+      if (isPandit) {
+        navigate("/pandit-dashboard", { replace: true });
+        return;
+      }
+      setStatus("Call ended");
+      setShowFeedback(true);
     },
-    [closePeerConnection, finalizeSession, isPandit, leaveSocketRoom, navigate, stopLocalMedia]
+    [callEnded, closePeerConnection, finalizeSession, isPandit, leaveSocketRoom, navigate, stopLocalMedia]
   );
 
   useEffect(() => {
@@ -356,12 +366,14 @@ const WebRTCCall = ({
   ]);
 
   useEffect(() => {
+    if (callEnded) return;
+
     const interval = setInterval(() => {
       setSeconds((prev) => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [callEnded]);
 
   useEffect(() => {
     if (seconds !== 0 || isPandit || callEnded) return;
@@ -393,6 +405,83 @@ const WebRTCCall = ({
     });
     setIsCameraOff(nextCameraOff);
   };
+
+  const submitFeedback = async () => {
+    if (!bookingId) {
+      toast.error("Unable to find this booking for feedback.");
+      return;
+    }
+
+    setIsSubmittingFeedback(true);
+
+    try {
+      await submitConsultationFeedback({
+        bookingId,
+        rating: feedbackRating,
+        comment: feedbackComment,
+      });
+      toast.success("Thanks for your feedback!");
+      navigate("/devotee-dashboard", { replace: true });
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to submit feedback.");
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
+
+  if (showFeedback && !isPandit) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4 text-white">
+        <section className="w-full max-w-md rounded-lg border border-white/10 bg-slate-900 p-6 shadow-2xl">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-orange-300">Consultation ended</p>
+          <h1 className="mt-3 text-2xl font-bold">Rate your call</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-300">
+            Your rating helps devotees discover trusted pandits.
+          </p>
+
+          <div className="mt-6 flex justify-center gap-2">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                onClick={() => setFeedbackRating(star)}
+                className={star <= feedbackRating ? "text-orange-400" : "text-slate-500"}
+                aria-label={`${star} star`}
+              >
+                <Star className="h-8 w-8 fill-current" />
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            value={feedbackComment}
+            onChange={(event) => setFeedbackComment(event.target.value)}
+            placeholder="Share your experience (optional)"
+            className="mt-5 min-h-24 w-full rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-400 focus:border-orange-300"
+          />
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate("/devotee-dashboard", { replace: true })}
+              className="rounded-lg"
+            >
+              Skip
+            </Button>
+            <Button
+              type="button"
+              onClick={submitFeedback}
+              disabled={feedbackRating === 0 || isSubmittingFeedback}
+              className="rounded-lg bg-orange-500 hover:bg-orange-600"
+            >
+              {isSubmittingFeedback ? "Submitting..." : "Submit"}
+            </Button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;

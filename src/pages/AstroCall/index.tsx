@@ -250,7 +250,8 @@ export default function AstroCall() {
                   image: pandit.image || pandit.avatar || "/assets/pandit-assistant.png",
                   price: pandit.pricePerMinute || pandit.price || 0,
                   experience: pandit.experience || `${pandit.experienceYears || 0} Years`,
-                  rating: pandit.rating || 5,
+                  rating: pandit.rating,
+                  ratingCount: pandit.ratingCount,
                 }}
                 onCall={() => startSession(pandit, "call")}
                 onChat={() => startSession(pandit, "chat")}

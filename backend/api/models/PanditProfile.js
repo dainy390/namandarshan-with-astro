@@ -61,9 +61,19 @@ const PanditProfileSchema = new mongoose.Schema(
     },
     rating: {
       type: Number,
-      default: 5,
+      default: 0,
       min: 0,
       max: 5,
+    },
+    ratingTotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     isActive: {
       type: Boolean,

@@ -6,6 +6,7 @@ const BookingSchema = require('../models/Booking');
 const PanditProfileSchema = require('../models/PanditProfile');
 const User = require('../models/User');
 const { readAuthSession } = require('../middleware/auth');
+const { notifyPanditBookingRequest } = require('../services/panditRequestNotifications');
 
 const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
 const Booking = mongoose.models.Booking || mongoose.model('Booking', BookingSchema);
@@ -161,6 +162,11 @@ async function startWalletSession(req, res) {
             status: 'active',
             sessionStartedAt: startedAt,
             sessionEndsAt: new Date(startedAt.getTime() + duration * 60 * 1000),
+        });
+
+        void notifyPanditBookingRequest(req, booking, {
+            panditEmail: profile.email,
+            panditName: profile.displayName,
         });
 
         res.status(201).json({

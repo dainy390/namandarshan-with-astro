@@ -54,6 +54,8 @@ function serializePanditProfile(profile) {
   const item = typeof profile?.toObject === "function" ? profile.toObject() : profile;
   const id = String(item.userId || item._id || "");
   const displayName = item.displayName || "Pandit";
+  const ratingCount = asNumber(item.ratingCount);
+  const rating = ratingCount > 0 ? Math.round(asNumber(item.rating) * 10) / 10 : 0;
 
   return {
     id,
@@ -73,7 +75,8 @@ function serializePanditProfile(profile) {
     status: item.status || "online",
     image: item.avatar || "",
     avatar: item.avatar || "",
-    rating: asNumber(item.rating) || 5,
+    rating,
+    ratingCount,
     isActive: item.isActive !== false,
     createdAt: item.createdAt?.toISOString?.() || item.createdAt || null,
     updatedAt: item.updatedAt?.toISOString?.() || item.updatedAt || null,
@@ -147,7 +150,8 @@ router.get("/profile", async (req, res, next) => {
         status: "online",
         image: "",
         avatar: "",
-        rating: 5,
+        rating: 0,
+        ratingCount: 0,
         isActive: true,
       },
     });
@@ -163,7 +167,6 @@ router.put("/profile", async (req, res, next) => {
 
     const pricePerMinute = Number(req.body.pricePerMinute ?? req.body.price);
     const experienceYears = Number(req.body.experienceYears);
-    const rating = Number(req.body.rating);
     const status = ["online", "busy", "offline"].includes(req.body.status)
       ? req.body.status
       : "online";
@@ -180,7 +183,6 @@ router.put("/profile", async (req, res, next) => {
       experienceYears: Number.isFinite(experienceYears) && experienceYears >= 0 ? experienceYears : 0,
       status,
       avatar: String(req.body.avatar || req.body.image || "").trim(),
-      rating: Number.isFinite(rating) ? Math.min(5, Math.max(0, rating)) : 5,
       isActive: req.body.isActive !== false,
     };
 

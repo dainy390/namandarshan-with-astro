@@ -21,6 +21,7 @@ export type PanditProfile = {
   image?: string;
   avatar?: string;
   rating?: number;
+  ratingCount?: number;
   isActive?: boolean;
 };
 
@@ -44,6 +45,20 @@ type FinalizeWalletSessionResponse = {
   };
   amountDebited?: number;
   walletDebitedAmount?: number;
+};
+
+type SubmitConsultationFeedbackResponse = {
+  success?: boolean;
+  message?: string;
+  feedback?: {
+    rating?: number;
+    comment?: string;
+    ratedAt?: string;
+  };
+  profile?: {
+    rating?: number;
+    ratingCount?: number;
+  } | null;
 };
 
 const readUserToken = () => {
@@ -132,6 +147,33 @@ export const finalizeWalletConsultationSession = async (bookingId: string) => {
   const data = await readJsonResponse<FinalizeWalletSessionResponse>(response);
   if (!response.ok || data.success === false) {
     throw new Error(data.message || "Unable to finalize consultation.");
+  }
+
+  return data;
+};
+
+export const submitConsultationFeedback = async ({
+  bookingId,
+  rating,
+  comment,
+}: {
+  bookingId: string;
+  rating: number;
+  comment?: string;
+}) => {
+  const token = readUserToken();
+  const response = await fetch(getApiUrl(`/api/bookings/${encodeURIComponent(bookingId)}/feedback`), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ rating, comment }),
+  });
+
+  const data = await readJsonResponse<SubmitConsultationFeedbackResponse>(response);
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || "Unable to submit feedback.");
   }
 
   return data;

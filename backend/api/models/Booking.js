@@ -46,7 +46,10 @@ const BookingSchema = new mongoose.Schema(
         data: mongoose.Schema.Types.Mixed,
         createdAt: Date
       }
-    ]
+    ],
+    devoteeRating: { type: Number, min: 1, max: 5 },
+    devoteeFeedback: { type: String, trim: true, default: "" },
+    devoteeRatedAt: Date
   },
   { timestamps: true }
 );

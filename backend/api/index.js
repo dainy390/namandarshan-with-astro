@@ -55,6 +55,18 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("pandit:subscribe", ({ panditId }) => {
+    const id = String(panditId || "").trim();
+    if (!id) return;
+    socket.join(`pandit:${id}`);
+  });
+
+  socket.on("pandit:unsubscribe", ({ panditId }) => {
+    const id = String(panditId || "").trim();
+    if (!id) return;
+    socket.leave(`pandit:${id}`);
+  });
+
   socket.on("call:join", ({ roomId, bookingId, role, name }) => {
     if (!roomId) return;
     socket.join(roomId);

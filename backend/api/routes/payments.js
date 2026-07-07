@@ -13,6 +13,7 @@ const {
   creditWalletForSession,
   readAuthSession
 } = require("../middleware/auth.js");
+const { notifyPanditBookingRequest } = require("../services/panditRequestNotifications.js");
 
 const router = Router();
 const Booking = mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
@@ -102,19 +103,31 @@ async function createBookingFromOrder(req, order, { paymentStatus, paymentId = n
   if (isMongoReady(req)) {
     const existing = await Booking.findOne({ razorpayOrderId: order.razorpayOrderId });
     if (existing) {
+      let shouldNotifyPandit = false;
       if (paymentStatus === "paid" && existing.paymentStatus !== "paid") {
         existing.paymentStatus = "paid";
         existing.amountPaid = order.amount;
         existing.razorpayPaymentId = paymentId;
         existing.paidAt = startedAt;
         await existing.save();
+        shouldNotifyPandit = true;
       }
 
-      return toSerializableBooking(existing);
+      const serialized = toSerializableBooking(existing);
+      if (shouldNotifyPandit) {
+        void notifyPanditBookingRequest(req, serialized);
+      }
+
+      return serialized;
     }
 
     const created = await Booking.create(booking);
-    return toSerializableBooking(created);
+    const serialized = toSerializableBooking(created);
+    if (paymentStatus === "paid") {
+      void notifyPanditBookingRequest(req, serialized);
+    }
+
+    return serialized;
   }
 
   const existing = memoryBookings.find(
@@ -122,18 +135,29 @@ async function createBookingFromOrder(req, order, { paymentStatus, paymentId = n
   );
 
   if (existing) {
+    let shouldNotifyPandit = false;
     if (paymentStatus === "paid" && existing.paymentStatus !== "paid") {
       existing.paymentStatus = "paid";
       existing.amountPaid = order.amount;
       existing.razorpayPaymentId = paymentId;
       existing.paidAt = startedAt.toISOString();
       existing.updatedAt = startedAt.toISOString();
+      shouldNotifyPandit = true;
+    }
+
+    if (shouldNotifyPandit) {
+      void notifyPanditBookingRequest(req, existing);
     }
 
     return existing;
   }
 
-  return rememberBooking(booking);
+  const remembered = rememberBooking(booking);
+  if (paymentStatus === "paid") {
+    void notifyPanditBookingRequest(req, remembered);
+  }
+
+  return remembered;
 }
 
 async function createPaidBooking(req, order, paymentId) {

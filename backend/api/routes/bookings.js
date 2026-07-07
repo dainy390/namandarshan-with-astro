@@ -11,6 +11,7 @@ const PanditProfile =
   mongoose.models.PanditProfile || mongoose.model('PanditProfile', PanditProfileSchema);
 
 const { createPaymentOrder, publicCheckoutOrder } = require("../services/payments.js");
+const { notifyPanditBookingRequest } = require("../services/panditRequestNotifications.js");
 const { readAuthSession, recordWalletSpendForSession } = require("../middleware/auth.js");
 const { getWalletDebitAmount, shouldDebitWalletForBooking } = require("../utils/bookingBilling.js");
 
@@ -41,6 +42,7 @@ async function findAstrologer(req, astrologerId) {
     return {
       id: String(profile.userId || profile._id),
       name: profile.displayName,
+      email: profile.email,
       modes: profile.modes?.length ? profile.modes : ["chat", "call"],
       pricePerMinute: Number(profile.pricePerMinute || 0),
       status: profile.status || "online",
@@ -60,6 +62,7 @@ async function findAstrologer(req, astrologerId) {
       return {
         id: String(astrologer.id || astrologer.publicId || astrologer._id),
         name: astrologer.name,
+        email: astrologer.email,
         modes: astrologer.modes?.length ? astrologer.modes : ["chat", "call"],
         pricePerMinute: Number(astrologer.pricePerMinute || astrologer.price || 0),
         status: astrologer.status || "online",
@@ -68,6 +71,57 @@ async function findAstrologer(req, astrologerId) {
   }
 
   return null;
+}
+
+function getPanditProfileLookup(astrologerId) {
+  const id = String(astrologerId || "").trim();
+  if (!id) return [];
+
+  const lookup = [{ email: id.toLowerCase() }];
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    lookup.push({ _id: id }, { userId: id });
+  }
+
+  return lookup;
+}
+
+function normalizeFeedbackRating(value) {
+  const rating = Number(value);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) return null;
+  return Math.round(rating);
+}
+
+function roundRating(value) {
+  return Math.round(Number(value || 0) * 10) / 10;
+}
+
+async function applyPanditRatingFromBooking(booking, previousRating, nextRating) {
+  const lookup = getPanditProfileLookup(booking.astrologerId);
+  if (!lookup.length) return null;
+
+  const profile = await PanditProfile.findOne({ $or: lookup });
+  if (!profile) return null;
+
+  const currentCount = Math.max(0, Number(profile.ratingCount || 0));
+  const storedTotal = Number(profile.ratingTotal);
+  const currentTotal =
+    Number.isFinite(storedTotal) && storedTotal > 0
+      ? storedTotal
+      : Math.max(0, Number(profile.rating || 0) * currentCount);
+  const hasPreviousRating =
+    Number.isFinite(previousRating) && previousRating >= 1 && previousRating <= 5 && currentCount > 0;
+  const nextCount = hasPreviousRating ? currentCount : currentCount + 1;
+  const nextTotal = Math.max(0, currentTotal - (hasPreviousRating ? previousRating : 0) + nextRating);
+
+  profile.ratingCount = nextCount;
+  profile.ratingTotal = nextTotal;
+  profile.rating = nextCount > 0 ? roundRating(nextTotal / nextCount) : 0;
+  await profile.save();
+
+  return {
+    rating: profile.rating,
+    ratingCount: profile.ratingCount,
+  };
 }
 
 async function getAstrologerForSession(req, session) {
@@ -146,6 +200,9 @@ function toSerializableBooking(booking) {
     place: item.place,
     etaMinutes: item.etaMinutes,
     status: session.status,
+    devoteeRating: item.devoteeRating || null,
+    devoteeFeedback: item.devoteeFeedback || "",
+    devoteeRatedAt: toIso(item.devoteeRatedAt),
     createdAt: toIso(item.createdAt),
     updatedAt: toIso(item.updatedAt)
   };
@@ -351,7 +408,7 @@ router.post("/", async (req, res, next) => {
 
     const bookingDraft = {
       bookingId: createBookingId(),
-      astrologerId,
+      astrologerId: astrologer.id,
       astrologerName: astrologer.name,
       customerId: session.id,
       customerEmail: session.email,
@@ -378,7 +435,7 @@ router.post("/", async (req, res, next) => {
       notes: {
         purpose: "consultation",
         bookingId: bookingDraft.bookingId,
-        astrologerId,
+        astrologerId: astrologer.id,
         mode
       },
       consultation: bookingDraft
@@ -470,6 +527,11 @@ router.post("/wallet-session", async (req, res, next) => {
       status: "active",
       sessionStartedAt: startedAt,
       sessionEndsAt: new Date(startedAt.getTime() + duration * 60 * 1000)
+    });
+
+    void notifyPanditBookingRequest(req, booking, {
+      panditEmail: astrologer.email,
+      panditName: astrologer.name,
     });
 
     res.status(201).json({
@@ -579,6 +641,59 @@ router.post("/:bookingId/finalize", async (req, res, next) => {
       walletDebitedAt: booking.walletDebitedAt || null,
       amountDebited: spendResult?.amountDebited || booking.walletDebitedAmount || null,
       wallet: spendResult?.wallet || spendResult || null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:bookingId/feedback", async (req, res, next) => {
+  try {
+    const booking = await findBooking(req, req.params.bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking was not found." });
+    }
+
+    const participant = await readParticipant(req, res, booking);
+    if (!participant) return;
+
+    if (participant.participantRole !== "customer") {
+      return res.status(403).json({ success: false, message: "Only devotees can rate a consultation." });
+    }
+
+    const rating = normalizeFeedbackRating(req.body.rating);
+    if (!rating) {
+      return res.status(400).json({ success: false, message: "Select a rating from 1 to 5." });
+    }
+
+    const comment = String(req.body.comment || req.body.feedback || "").trim().slice(0, 1000);
+    const previousRating = Number(booking.devoteeRating);
+
+    ensureSessionFields(booking);
+    if (booking.status !== "completed") {
+      booking.sessionEndsAt = new Date();
+      booking.status = "completed";
+      await saveBooking(req, booking);
+      await finalizeCompletedSession(req, booking);
+    }
+
+    booking.devoteeRating = rating;
+    booking.devoteeFeedback = comment;
+    booking.devoteeRatedAt = new Date();
+    await saveBooking(req, booking);
+
+    const profileRating = await applyPanditRatingFromBooking(booking, previousRating, rating);
+
+    res.json({
+      success: true,
+      message: "Thanks for rating your consultation.",
+      feedback: {
+        rating: booking.devoteeRating,
+        comment: booking.devoteeFeedback,
+        ratedAt: toIso(booking.devoteeRatedAt),
+      },
+      profile: profileRating,
     });
   } catch (error) {
     next(error);

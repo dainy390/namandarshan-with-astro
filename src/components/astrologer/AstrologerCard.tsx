@@ -1,9 +1,14 @@
+import { Star } from "lucide-react";
+
 const AstrologerCard = ({ astrologer, onCall, onChat }: any) => {
   const canChat = !astrologer.modes || astrologer.modes.includes("chat");
   const canCall = !astrologer.modes || astrologer.modes.includes("call");
   const image = astrologer.image || astrologer.avatar || "/assets/pandit-assistant.png";
   const price = astrologer.pricePerMinute || astrologer.price || 0;
   const status = astrologer.status || "online";
+  const ratingCount = Number(astrologer.ratingCount || 0);
+  const ratingValue = Number(astrologer.rating || 0);
+  const ratingLabel = ratingCount > 0 ? ratingValue.toFixed(1) : "New";
 
   return (
     <div className="relative rounded-2xl border bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-xl">
@@ -27,8 +32,9 @@ const AstrologerCard = ({ astrologer, onCall, onChat }: any) => {
         <h3 className="mt-4 text-center text-xl font-bold">{astrologer.name}</h3>
 
         <div className="mt-1 flex items-center gap-1">
-          <span className="text-amber-500">*</span>
-          <span className="font-medium">{astrologer.rating || 5}</span>
+          <Star className="h-4 w-4 fill-current text-amber-500" />
+          <span className="font-medium">{ratingLabel}</span>
+          {ratingCount > 0 && <span className="text-xs text-gray-500">({ratingCount})</span>}
         </div>
       </div>
 

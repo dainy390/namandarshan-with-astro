@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
+  Bell,
   CalendarCheck,
   CheckCircle2,
   Clock3,
@@ -9,7 +10,6 @@ import {
   MessageCircle,
   PhoneCall,
   RefreshCw,
-  Search,
   LogOut,
   Save,
   UserRound,
@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { getApiUrl, readJsonResponse } from "@/utils/api";
 import { useAuth } from "@/context/AuthContext";
+import { useSocket } from "@/context/SocketContext";
 import { Button } from "@/components/ui/button";
 
 type RangeOption = "7d" | "30d" | "90d" | "all";
@@ -65,6 +66,22 @@ interface RecentBooking {
   bookedAt: string | null;
 }
 
+interface PanditBookingNotification {
+  bookingId: string;
+  roomId?: string;
+  astrologerId: string;
+  astrologerName: string;
+  customerName: string;
+  customerEmail?: string;
+  concern?: string;
+  mode: "chat" | "call";
+  durationMinutes: number;
+  status?: string;
+  bookedAt?: string | null;
+  receivedAt: string;
+  unread: boolean;
+}
+
 interface PanditProfile {
   id: string;
   userId?: string | null;
@@ -81,6 +98,7 @@ interface PanditProfile {
   avatar?: string;
   image?: string;
   rating?: number;
+  ratingCount?: number;
   isActive?: boolean;
 }
 
@@ -144,7 +162,6 @@ const emptyProfileForm = {
   experienceYears: "0",
   status: "online" as "online" | "busy" | "offline",
   avatar: "",
-  rating: "5",
   isActive: true,
 };
 
@@ -200,6 +217,10 @@ function modeClass(mode: string) {
     : "bg-emerald-50 text-emerald-700 border-emerald-200";
 }
 
+function isOpenRequestStatus(status: string) {
+  return ["active", "confirmed"].includes(String(status || "").toLowerCase());
+}
+
 const MetricCard = ({
   title,
   value,
@@ -231,8 +252,6 @@ const PanditDashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const rangeParam = searchParams.get("range");
   const range: RangeOption = isRange(rangeParam) ? rangeParam : "30d";
-  const panditId = searchParams.get("panditId")?.trim() || "";
-  const [panditIdDraft, setPanditIdDraft] = useState(panditId);
   const [data, setData] = useState<PanditDashboardResponse | null>(null);
   const [profile, setProfile] = useState<PanditProfile | null>(null);
   const [profileForm, setProfileForm] = useState(emptyProfileForm);
@@ -240,34 +259,28 @@ const PanditDashboard = () => {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<PanditBookingNotification[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const navigate = useNavigate();
   const { user, isUserAuthenticated, isLoading: authLoading, logoutUser } = useAuth();
-
-  useEffect(() => {
-    setPanditIdDraft(panditId);
-  }, [panditId]);
+  const { socket, isConnected } = useSocket();
 
   const updateParams = useCallback(
-    (next: { range?: RangeOption; panditId?: string }) => {
-      const params = new URLSearchParams(searchParams);
+    (next: { range?: RangeOption }) => {
+      const params = new URLSearchParams();
       if (next.range) params.set("range", next.range);
-      if (Object.prototype.hasOwnProperty.call(next, "panditId")) {
-        const nextPanditId = next.panditId?.trim() || "";
-        if (nextPanditId) params.set("panditId", nextPanditId);
-        else params.delete("panditId");
-      }
       setSearchParams(params, { replace: true });
     },
-    [searchParams, setSearchParams]
+    [setSearchParams]
   );
 
-  const loadDashboard = useCallback(async () => {
-    setIsLoading(true);
+  const loadDashboard = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) setIsLoading(true);
     setError(null);
 
     try {
       const params = new URLSearchParams({ range });
-      if (panditId) params.set("panditId", panditId);
 
       const token = localStorage.getItem("userToken");
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
@@ -282,12 +295,14 @@ const PanditDashboard = () => {
 
       setData(payload);
     } catch (loadError: any) {
-      setError(loadError?.message || "Unable to load dashboard.");
-      setData(null);
+      if (!silent) {
+        setError(loadError?.message || "Unable to load dashboard.");
+        setData(null);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
-  }, [panditId, range]);
+  }, [range]);
 
   const loadProfile = useCallback(async () => {
     const token = localStorage.getItem("userToken");
@@ -315,7 +330,6 @@ const PanditDashboard = () => {
         experienceYears: String(nextProfile.experienceYears || 0),
         status: nextProfile.status || "online",
         avatar: nextProfile.avatar || nextProfile.image || "",
-        rating: String(nextProfile.rating || 5),
         isActive: nextProfile.isActive !== false,
       });
       setProfileError(null);
@@ -342,15 +356,98 @@ const PanditDashboard = () => {
   const totals = data?.totals || emptyTotals;
   const byMode = data?.byMode || { call: emptyMode, chat: emptyMode };
   const visibleDaily = useMemo(() => (data?.daily || []).slice(-14), [data?.daily]);
-  const dashboardLabel = data?.scope.panditName || user?.name || (panditId ? "Pandit" : "All pandits");
+  const dashboardLabel = data?.scope.panditName || profile?.displayName || user?.name || "Pandit";
+  const currentPanditId = String(profile?.id || user?._id || data?.scope.panditId || "").trim();
+  const unreadNotificationCount = notifications.filter((item) => item.unread).length;
   const maxDailyBookings = Math.max(1, ...visibleDaily.map((item) => item.bookings));
   const completionRate =
     totals.totalBookings > 0 ? Math.round((totals.completedBookings / totals.totalBookings) * 100) : 0;
 
-  const applyPanditFilter = (event: FormEvent) => {
-    event.preventDefault();
-    updateParams({ panditId: panditIdDraft });
-  };
+  useEffect(() => {
+    const activeRequests = (data?.recentBookings || [])
+      .filter((booking) => isOpenRequestStatus(booking.status))
+      .map<PanditBookingNotification>((booking) => ({
+        bookingId: booking.bookingId,
+        roomId: booking.bookingId,
+        astrologerId: booking.astrologerId,
+        astrologerName: booking.astrologerName || dashboardLabel,
+        customerName: booking.customerName || "Devotee",
+        customerEmail: booking.customerEmail,
+        concern: booking.concern,
+        mode: booking.mode,
+        durationMinutes: Number(booking.durationMinutes || 5),
+        status: booking.status,
+        bookedAt: booking.bookedAt,
+        receivedAt: booking.bookedAt || new Date().toISOString(),
+        unread: true,
+      }));
+
+    setNotifications((prev) => {
+      const previousById = new Map(prev.map((item) => [item.bookingId, item]));
+
+      return activeRequests.map((request) => {
+        const previous = previousById.get(request.bookingId);
+        return previous
+          ? {
+              ...request,
+              receivedAt: previous.receivedAt,
+              unread: previous.unread,
+            }
+          : request;
+      });
+    });
+  }, [dashboardLabel, data?.recentBookings]);
+
+  useEffect(() => {
+    if (!currentPanditId || authLoading || !isUserAuthenticated) return;
+
+    const interval = window.setInterval(() => {
+      void loadDashboard({ silent: true });
+    }, 8000);
+
+    return () => window.clearInterval(interval);
+  }, [authLoading, currentPanditId, isUserAuthenticated, loadDashboard]);
+
+  useEffect(() => {
+    if (!socket || !isConnected || !currentPanditId) return;
+
+    socket.emit("pandit:subscribe", { panditId: currentPanditId });
+
+    const handleBookingRequest = (payload: Partial<PanditBookingNotification>) => {
+      if (!payload.bookingId || !payload.astrologerId || !payload.mode) return;
+      if (currentPanditId && String(payload.astrologerId) !== currentPanditId) return;
+
+      const nextNotification: PanditBookingNotification = {
+        bookingId: String(payload.bookingId),
+        roomId: String(payload.roomId || payload.bookingId),
+        astrologerId: String(payload.astrologerId),
+        astrologerName: String(payload.astrologerName || dashboardLabel),
+        customerName: String(payload.customerName || "Devotee"),
+        customerEmail: payload.customerEmail,
+        concern: payload.concern,
+        mode: payload.mode,
+        durationMinutes: Number(payload.durationMinutes || 5),
+        status: payload.status || "active",
+        bookedAt: payload.bookedAt || new Date().toISOString(),
+        receivedAt: new Date().toISOString(),
+        unread: true,
+      };
+
+      setNotifications((prev) => [
+        nextNotification,
+        ...prev.filter((item) => item.bookingId !== nextNotification.bookingId),
+      ].slice(0, 12));
+      toast.info(`${nextNotification.customerName} requested a ${nextNotification.mode}.`);
+      void loadDashboard({ silent: true });
+    };
+
+    socket.on("pandit:booking-request", handleBookingRequest);
+
+    return () => {
+      socket.emit("pandit:unsubscribe", { panditId: currentPanditId });
+      socket.off("pandit:booking-request", handleBookingRequest);
+    };
+  }, [currentPanditId, dashboardLabel, isConnected, loadDashboard, socket]);
 
   const handleLogout = () => {
     logoutUser();
@@ -390,7 +487,6 @@ const PanditDashboard = () => {
           ...profileForm,
           pricePerMinute: Number(profileForm.pricePerMinute),
           experienceYears: Number(profileForm.experienceYears),
-          rating: Number(profileForm.rating),
         }),
       });
       const payload = await readJsonResponse<ProfileResponse>(response);
@@ -424,6 +520,10 @@ const PanditDashboard = () => {
           bookingId: booking.bookingId,
           roomId: booking.bookingId,
           astrologer,
+          devotee: {
+            name: booking.customerName || "Devotee",
+            email: booking.customerEmail || "",
+          },
           durationSeconds,
         },
       });
@@ -438,6 +538,37 @@ const PanditDashboard = () => {
         durationSeconds,
         joinExisting: true,
       },
+    });
+  };
+
+  const joinNotification = (notification: PanditBookingNotification) => {
+    setNotifications((prev) =>
+      prev.map((item) => item.bookingId === notification.bookingId ? { ...item, unread: false } : item)
+    );
+    setIsNotificationsOpen(false);
+    joinBooking({
+      bookingId: notification.bookingId,
+      astrologerId: notification.astrologerId,
+      astrologerName: notification.astrologerName,
+      customerName: notification.customerName,
+      customerEmail: notification.customerEmail,
+      concern: notification.concern,
+      mode: notification.mode,
+      durationMinutes: notification.durationMinutes,
+      earnings: 0,
+      paymentStatus: "wallet_pending",
+      status: notification.status || "active",
+      bookedAt: notification.bookedAt || notification.receivedAt,
+    });
+  };
+
+  const toggleNotifications = () => {
+    setIsNotificationsOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setNotifications((items) => items.map((item) => ({ ...item, unread: false })));
+      }
+      return next;
     });
   };
 
@@ -472,28 +603,78 @@ const PanditDashboard = () => {
               ))}
             </div>
 
-            <form onSubmit={applyPanditFilter} className="flex min-w-0 items-center gap-2">
-              <label htmlFor="pandit-id" className="sr-only">
-                Pandit ID
-              </label>
-              <input
-                id="pandit-id"
-                value={panditIdDraft}
-                onChange={(event) => setPanditIdDraft(event.target.value)}
-                placeholder="Pandit name or ID"
-                className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100 md:w-44"
-              />
-              <button
-                type="submit"
-                title="Apply pandit filter"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white transition hover:bg-slate-800"
-              >
-                <Search className="h-4 w-4" />
-              </button>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="relative">
+                <button
+                  type="button"
+                  title="Notifications"
+                  aria-label="Notifications"
+                  onClick={toggleNotifications}
+                  className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100"
+                >
+                  <Bell className="h-4 w-4" />
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-600 px-1.5 text-[11px] font-bold text-white">
+                      {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                    </span>
+                  )}
+                </button>
+
+                {isNotificationsOpen && (
+                  <div className="absolute right-0 top-12 z-40 w-[min(92vw,360px)] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+                    <div className="border-b border-slate-100 px-4 py-3">
+                      <p className="font-semibold text-slate-950">Requests</p>
+                      <p className="text-xs text-slate-500">New chat and call requests</p>
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto">
+                      {notifications.length > 0 ? (
+                        notifications.map((notification) => {
+                          const Icon = notification.mode === "call" ? PhoneCall : MessageCircle;
+
+                          return (
+                            <div key={notification.bookingId} className="border-b border-slate-100 px-4 py-3 last:border-b-0">
+                              <div className="flex items-start gap-3">
+                                <div className={`mt-0.5 rounded-lg p-2 ${notification.mode === "call" ? "bg-sky-50 text-sky-700" : "bg-emerald-50 text-emerald-700"}`}>
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-slate-950">
+                                    {notification.customerName}
+                                  </p>
+                                  <p className="truncate text-xs text-slate-500">
+                                    {notification.concern || `Live ${notification.mode} consultation`}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-400">
+                                    {formatDate(notification.bookedAt || notification.receivedAt)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => joinNotification(notification)}
+                                className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                                Join {notification.mode}
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="px-4 py-8 text-center text-sm font-medium text-slate-500">
+                          No new requests
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 title="Refresh dashboard"
-                onClick={loadDashboard}
+                onClick={() => void loadDashboard()}
                 className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-100"
               >
                 <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
@@ -507,7 +688,7 @@ const PanditDashboard = () => {
                 <LogOut className="h-4 w-4" />
                 Logout
               </button>
-            </form>
+            </div>
           </div>
         </div>
       </div>
@@ -615,22 +796,6 @@ const PanditDashboard = () => {
                 <option value="busy">Busy</option>
                 <option value="offline">Offline</option>
               </select>
-            </div>
-
-            <div>
-              <label className="text-sm font-semibold text-slate-700" htmlFor="rating">
-                Rating
-              </label>
-              <input
-                id="rating"
-                type="number"
-                min="0"
-                max="5"
-                step="0.1"
-                value={profileForm.rating}
-                onChange={(event) => updateProfileField("rating", event.target.value)}
-                className="mt-2 h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-              />
             </div>
 
             <div className="lg:col-span-2">
@@ -851,7 +1016,7 @@ const PanditDashboard = () => {
             </div>
             <div className="flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">
               <Users className="h-4 w-4" />
-              {data?.scope.panditId || "All"}
+              {data?.scope.panditName || dashboardLabel}
             </div>
           </div>
 
@@ -859,7 +1024,7 @@ const PanditDashboard = () => {
             <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-slate-500">
                 <tr>
-                  <th className="px-5 py-3 font-semibold">Booking</th>
+                  <th className="px-5 py-3 font-semibold">Pandit</th>
                   <th className="px-5 py-3 font-semibold">Customer</th>
                   <th className="px-5 py-3 font-semibold">Mode</th>
                   <th className="px-5 py-3 font-semibold">Status</th>
@@ -874,7 +1039,7 @@ const PanditDashboard = () => {
                   data.recentBookings.map((booking) => (
                     <tr key={booking.bookingId} className="hover:bg-slate-50">
                       <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-950">{booking.bookingId}</p>
+                        <p className="font-semibold text-slate-950">{booking.astrologerName || dashboardLabel}</p>
                         <p className="max-w-72 truncate text-slate-500">{booking.concern || booking.astrologerName}</p>
                       </td>
                       <td className="px-5 py-4">

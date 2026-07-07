@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Star } from "lucide-react";
 import Header from "@/components/layout/Header";
 import RechargeModal from "@/components/astrologer/RechargeModal";
 import SessionTimer from "@/components/session/sessionTimer";
 import { useAuth } from "@/context/AuthContext";
 import { useSocket } from "@/context/SocketContext";
 import { useWallet } from "@/context/WalletContext";
+import { getApiUrl, readJsonResponse } from "@/utils/api";
 import { canStartConsultation } from "@/utils/consultationAccess";
 import {
   finalizeWalletConsultationSession,
   startWalletConsultationSession,
+  submitConsultationFeedback,
 } from "@/utils/consultationSession";
 import { toast } from "sonner";
 
@@ -19,6 +22,13 @@ interface ChatMessage {
   text: string;
   time: string;
 }
+
+type BookingSessionResponse = {
+  booking?: {
+    customerName?: string;
+    customerEmail?: string;
+  };
+};
 
 const DEFAULT_SESSION_SECONDS = 300;
 const DEFAULT_AVATAR = "/assets/pandit-assistant.png";
@@ -42,8 +52,18 @@ const AstroChat = () => {
     };
   }, [location.state?.astrologer]);
 
+  const devotee = useMemo(() => {
+    const stateDevotee = location.state?.devotee || {};
+    return {
+      name: stateDevotee.name || stateDevotee.displayName || location.state?.customerName || "Devotee",
+      avatar: stateDevotee.avatar || stateDevotee.image || DEFAULT_AVATAR,
+      image: stateDevotee.image || stateDevotee.avatar || DEFAULT_AVATAR,
+    };
+  }, [location.state?.customerName, location.state?.devotee]);
+
   const routeBookingId = String(location.state?.bookingId || "");
   const initialSessionSeconds = Number(location.state?.durationSeconds || DEFAULT_SESSION_SECONDS);
+  const [resolvedDevotee, setResolvedDevotee] = useState(devotee);
   const [activeBookingId, setActiveBookingId] = useState(routeBookingId);
   const [effectiveSessionSeconds, setEffectiveSessionSeconds] = useState(initialSessionSeconds);
   const [isStartingSession, setIsStartingSession] = useState(!routeBookingId && !isPandit);
@@ -60,6 +80,7 @@ const AstroChat = () => {
   const [showRecharge, setShowRecharge] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeBookingIdRef = useRef(routeBookingId);
   const hasFinalizedRef = useRef(false);
@@ -69,10 +90,49 @@ const AstroChat = () => {
     activeBookingId ||
     `room-${astrologer.id || "pandit"}-${user?._id || "guest"}`;
   const senderRole: "user" | "astro" = isPandit ? "astro" : "user";
+  const chatHeaderPerson = isPandit ? resolvedDevotee : astrologer;
+
+  useEffect(() => {
+    setResolvedDevotee(devotee);
+  }, [devotee]);
 
   useEffect(() => {
     activeBookingIdRef.current = activeBookingId;
   }, [activeBookingId]);
+
+  useEffect(() => {
+    if (!isPandit || !activeBookingId) return;
+
+    const token = localStorage.getItem("userToken");
+    if (!token) return;
+
+    let cancelled = false;
+
+    const loadBookingDevotee = async () => {
+      try {
+        const response = await fetch(getApiUrl(`/api/bookings/${encodeURIComponent(activeBookingId)}/session`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await readJsonResponse<BookingSessionResponse>(response);
+        const customerName = payload.booking?.customerName?.trim();
+
+        if (!cancelled && customerName) {
+          setResolvedDevotee((prev) => ({
+            ...prev,
+            name: customerName,
+          }));
+        }
+      } catch (error) {
+        console.error("[AstroChat] Failed to load booking devotee:", error);
+      }
+    };
+
+    loadBookingDevotee();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBookingId, isPandit]);
 
   const finalizeSession = useCallback(async () => {
     if (isPandit || hasFinalizedRef.current) return;
@@ -236,15 +296,34 @@ const AstroChat = () => {
     toast.error("Your session has ended.");
   }, [finalizeSession]);
 
-  const submitFeedback = () => {
-    socket?.emit("chat:feedback", {
-      roomId,
-      astrologerId: astrologer.id,
-      rating: feedbackRating,
-      comment: feedbackComment,
-    });
-    toast.success("Thanks for your feedback!");
-    navigate("/devotee-dashboard");
+  const submitFeedback = async () => {
+    const bookingId = activeBookingIdRef.current;
+    if (!bookingId) {
+      toast.error("Unable to find this booking for feedback.");
+      return;
+    }
+
+    setIsSubmittingFeedback(true);
+
+    try {
+      await submitConsultationFeedback({
+        bookingId,
+        rating: feedbackRating,
+        comment: feedbackComment,
+      });
+      socket?.emit("chat:feedback", {
+        roomId,
+        astrologerId: astrologer.id,
+        rating: feedbackRating,
+        comment: feedbackComment,
+      });
+      toast.success("Thanks for your feedback!");
+      navigate("/devotee-dashboard");
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to submit feedback.");
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
   };
 
   return (
@@ -256,12 +335,12 @@ const AstroChat = () => {
           <div className="flex shrink-0 flex-col gap-3 rounded-t-xl border bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-4">
             <div className="flex min-w-0 items-center gap-3">
               <img
-                src={astrologer.avatar}
-                alt={astrologer.name}
+                src={chatHeaderPerson.avatar}
+                alt={chatHeaderPerson.name}
                 className="h-10 w-10 shrink-0 rounded-full object-cover sm:h-12 sm:w-12"
               />
               <div className="min-w-0">
-                <h2 className="truncate text-base font-bold sm:text-lg">{astrologer.name}</h2>
+                <h2 className="truncate text-base font-bold sm:text-lg">{chatHeaderPerson.name}</h2>
                 <p className={`text-sm ${isConnected ? "text-green-600" : "text-gray-400"}`}>
                   {isConnected ? "Online" : "Connecting..."}
                 </p>
@@ -336,10 +415,10 @@ const AstroChat = () => {
                       key={star}
                       type="button"
                       onClick={() => setFeedbackRating(star)}
-                      className={`text-2xl ${star <= feedbackRating ? "text-orange-500" : "text-gray-300"}`}
+                      className={star <= feedbackRating ? "text-orange-500" : "text-gray-300"}
                       aria-label={`${star} star`}
                     >
-                      *
+                      <Star className="h-7 w-7 fill-current" />
                     </button>
                   ))}
                 </div>
@@ -353,10 +432,10 @@ const AstroChat = () => {
                 <button
                   type="button"
                   onClick={submitFeedback}
-                  disabled={feedbackRating === 0}
+                  disabled={feedbackRating === 0 || isSubmittingFeedback}
                   className="mt-3 w-full rounded-lg bg-gray-800 py-2 font-medium text-white hover:bg-gray-900 disabled:opacity-40"
                 >
-                  Submit Feedback
+                  {isSubmittingFeedback ? "Submitting..." : "Submit Feedback"}
                 </button>
               </div>
             </div>

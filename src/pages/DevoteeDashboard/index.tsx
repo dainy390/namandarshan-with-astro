@@ -278,6 +278,9 @@ const DevoteeDashboard = () => {
                   const price = pandit.pricePerMinute || pandit.price || 0;
                   const canChat = (pandit.modes || []).includes("chat");
                   const canCall = (pandit.modes || []).includes("call");
+                  const ratingCount = Number(pandit.ratingCount || 0);
+                  const ratingValue = Number(pandit.rating || 0);
+                  const ratingLabel = ratingCount > 0 ? ratingValue.toFixed(1) : "New";
 
                   return (
                     <article key={pandit.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -295,7 +298,8 @@ const DevoteeDashboard = () => {
                           </div>
                           <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-sm font-semibold text-amber-700">
                             <Star className="h-4 w-4 fill-current" />
-                            {pandit.rating || 5}
+                            <span>{ratingLabel}</span>
+                            {ratingCount > 0 && <span className="text-xs text-amber-600">({ratingCount})</span>}
                           </div>
                         </div>
 
