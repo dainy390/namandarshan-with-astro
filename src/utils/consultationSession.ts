@@ -37,12 +37,13 @@ type StartWalletSessionResponse = {
   };
 };
 
-type FinalizeWalletSessionResponse = {
+export type FinalizeWalletSessionResponse = {
   success?: boolean;
   message?: string;
   wallet?: {
     balance?: number;
   };
+  debitAmount?: number;
   amountDebited?: number;
   walletDebitedAmount?: number;
 };

@@ -336,7 +336,8 @@ async function finalizeCompletedSession(req, booking) {
       role: 'user'
     }, debitAmount);
 
-    booking.walletDebitedAmount = spendResult.amountDebited || debitAmount;
+    booking.walletDebitedAmount =
+      Number.isFinite(Number(spendResult.amountDebited)) ? Number(spendResult.amountDebited) : debitAmount;
     booking.walletDebitedAt = new Date();
     await saveBooking(req, booking);
     return spendResult;
@@ -603,7 +604,7 @@ router.post("/finalize", async (req, res, next) => {
       debitAmount,
       walletDebitedAmount: booking.walletDebitedAmount || null,
       walletDebitedAt: booking.walletDebitedAt || null,
-      amountDebited: spendResult?.amountDebited || booking.walletDebitedAmount || null,
+      amountDebited: spendResult?.amountDebited ?? booking.walletDebitedAmount ?? null,
       wallet: spendResult?.wallet || spendResult || null
     });
   } catch (error) {
@@ -639,7 +640,7 @@ router.post("/:bookingId/finalize", async (req, res, next) => {
       debitAmount,
       walletDebitedAmount: booking.walletDebitedAmount || null,
       walletDebitedAt: booking.walletDebitedAt || null,
-      amountDebited: spendResult?.amountDebited || booking.walletDebitedAmount || null,
+      amountDebited: spendResult?.amountDebited ?? booking.walletDebitedAmount ?? null,
       wallet: spendResult?.wallet || spendResult || null
     });
   } catch (error) {

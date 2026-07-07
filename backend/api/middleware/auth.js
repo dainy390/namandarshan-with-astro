@@ -70,13 +70,14 @@ async function recordWalletSpendForSession(req, session, amount) {
     throw new Error('Wallet not found');
   }
 
-  if (wallet.balance < spendAmount) {
-    throw new Error('Insufficient wallet balance');
-  }
-
-  wallet.balance -= spendAmount;
+  wallet.balance = Number(wallet.balance || 0) - spendAmount;
   await wallet.save();
-  return wallet.toObject ? wallet.toObject() : wallet;
+  const walletObject = wallet.toObject ? wallet.toObject() : wallet;
+
+  return {
+    wallet: walletObject,
+    amountDebited: spendAmount,
+  };
 }
 
 // Load CRM user from x-user-id header and populate req.user

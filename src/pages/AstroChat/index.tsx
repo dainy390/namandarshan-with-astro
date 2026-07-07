@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Star } from "lucide-react";
+import { Loader2, LogOut, Star } from "lucide-react";
 import Header from "@/components/layout/Header";
 import RechargeModal from "@/components/astrologer/RechargeModal";
 import SessionTimer from "@/components/session/sessionTimer";
@@ -10,6 +10,7 @@ import { useWallet } from "@/context/WalletContext";
 import { getApiUrl, readJsonResponse } from "@/utils/api";
 import { canStartConsultation } from "@/utils/consultationAccess";
 import {
+  FinalizeWalletSessionResponse,
   finalizeWalletConsultationSession,
   startWalletConsultationSession,
   submitConsultationFeedback,
@@ -32,6 +33,14 @@ type BookingSessionResponse = {
 
 const DEFAULT_SESSION_SECONDS = 300;
 const DEFAULT_AVATAR = "/assets/pandit-assistant.png";
+
+const formatMoney = (amount?: number | null) =>
+  `Rs. ${Number(amount || 0).toLocaleString("en-IN")}`;
+
+const getFinalizedDebitAmount = (result?: FinalizeWalletSessionResponse | null) => {
+  const amount = Number(result?.amountDebited ?? result?.walletDebitedAmount ?? result?.debitAmount ?? 0);
+  return Number.isFinite(amount) && amount >= 0 ? amount : 0;
+};
 
 const AstroChat = () => {
   const navigate = useNavigate();
@@ -81,6 +90,9 @@ const AstroChat = () => {
   const [feedbackRating, setFeedbackRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [isEndingSession, setIsEndingSession] = useState(false);
+  const [finalizedDebitAmount, setFinalizedDebitAmount] = useState<number | null>(null);
+  const [finalizedWalletBalance, setFinalizedWalletBalance] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeBookingIdRef = useRef(routeBookingId);
   const hasFinalizedRef = useRef(false);
@@ -134,19 +146,36 @@ const AstroChat = () => {
     };
   }, [activeBookingId, isPandit]);
 
-  const finalizeSession = useCallback(async () => {
-    if (isPandit || hasFinalizedRef.current) return;
+  const finalizeSession = useCallback(async ({ showToast = false }: { showToast?: boolean } = {}) => {
+    if (isPandit || hasFinalizedRef.current) return null;
 
     const bookingId = activeBookingIdRef.current;
-    if (!bookingId) return;
+    if (!bookingId) return null;
 
     hasFinalizedRef.current = true;
 
     try {
-      await finalizeWalletConsultationSession(bookingId);
+      const result = await finalizeWalletConsultationSession(bookingId);
+      const chargedAmount = getFinalizedDebitAmount(result);
+      const nextWalletBalance = Number(result.wallet?.balance);
+
+      setFinalizedDebitAmount(chargedAmount);
+      if (Number.isFinite(nextWalletBalance)) {
+        setFinalizedWalletBalance(nextWalletBalance);
+      }
+
       await refreshBalance();
+      if (showToast) {
+        toast.success(`Chat ended. ${formatMoney(chargedAmount)} deducted from your wallet.`);
+      }
+      return result;
     } catch (error) {
+      hasFinalizedRef.current = false;
       console.error("[AstroChat] Failed to finalize consultation:", error);
+      if (showToast) {
+        toast.error(error instanceof Error ? error.message : "Unable to end this chat session.");
+      }
+      return null;
     }
   }, [isPandit, refreshBalance]);
 
@@ -292,9 +321,20 @@ const AstroChat = () => {
 
   const handleExpire = useCallback(() => {
     setSessionEnded(true);
-    finalizeSession();
+    void finalizeSession();
     toast.error("Your session has ended.");
   }, [finalizeSession]);
+
+  const exitChatSession = useCallback(async () => {
+    if (sessionEnded || isEndingSession) return;
+
+    setIsEndingSession(true);
+    const result = await finalizeSession({ showToast: true });
+    if (result) {
+      setSessionEnded(true);
+    }
+    setIsEndingSession(false);
+  }, [finalizeSession, isEndingSession, sessionEnded]);
 
   const submitFeedback = async () => {
     const bookingId = activeBookingIdRef.current;
@@ -373,6 +413,22 @@ const AstroChat = () => {
                   />
                 )
               )}
+
+              {!sessionEnded && !isPandit && !isStartingSession && (
+                <button
+                  type="button"
+                  onClick={exitChatSession}
+                  disabled={isEndingSession}
+                  className="inline-flex min-h-12 items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isEndingSession ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <LogOut className="h-4 w-4" />
+                  )}
+                  {isEndingSession ? "Ending..." : "Exit Chat"}
+                </button>
+              )}
             </div>
           </div>
 
@@ -399,13 +455,33 @@ const AstroChat = () => {
           {sessionEnded && !isPandit ? (
             <div className="shrink-0 space-y-3 rounded-b-xl border bg-white p-4 text-center sm:space-y-4 sm:p-5">
               <p className="font-semibold text-gray-700">Your session has ended.</p>
-              <button
-                type="button"
-                onClick={() => setShowRecharge(true)}
-                className="rounded-xl bg-orange-500 px-6 py-3 font-medium text-white hover:bg-orange-600"
-              >
-                Add Money
-              </button>
+
+              {finalizedDebitAmount !== null && (
+                <div className="mx-auto grid max-w-md gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">Amount deducted</p>
+                    <p className="mt-1 text-lg font-bold text-slate-950">
+                      {formatMoney(finalizedDebitAmount)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">Wallet balance</p>
+                    <p className="mt-1 text-lg font-bold text-emerald-700">
+                      {formatMoney(finalizedWalletBalance ?? balance)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {!hasWalletBalance && (
+                <button
+                  type="button"
+                  onClick={() => setShowRecharge(true)}
+                  className="rounded-xl bg-orange-500 px-6 py-3 font-medium text-white hover:bg-orange-600"
+                >
+                  Add Money
+                </button>
+              )}
 
               <div className="border-t pt-4">
                 <p className="mb-2 font-medium">How was your consultation?</p>
@@ -446,13 +522,15 @@ const AstroChat = () => {
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   onKeyDown={(event) => event.key === "Enter" && sendMessage()}
+                  disabled={isEndingSession}
                   placeholder="Type your message..."
-                  className="min-w-0 flex-1 rounded-xl border px-4 py-3 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-xl border px-4 py-3 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50"
                 />
                 <button
                   type="button"
                   onClick={sendMessage}
-                  className="rounded-xl bg-orange-500 px-4 font-medium text-white hover:bg-orange-600 sm:px-6"
+                  disabled={isEndingSession}
+                  className="rounded-xl bg-orange-500 px-4 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60 sm:px-6"
                 >
                   Send
                 </button>

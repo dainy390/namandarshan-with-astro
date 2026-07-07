@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Search, Menu, X, User, CreditCard, LogOut, ChevronDown } from "lucide-react";
 import namanLogo from "@/assets/naman.webp";
@@ -11,6 +11,7 @@ import GlobalSearch from "@/components/common/GlobalSearch";
 const Header = () => {
   const { isUserAuthenticated, isLoading, logoutUser, user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAtTop, setIsAtTop] = useState(true);
@@ -76,6 +77,12 @@ const Header = () => {
     { name: "Chadhava", href: "/chadhava" },
   ];
 
+  const handleLogout = () => {
+    logoutUser();
+    setIsMenuOpen(false);
+    navigate("/", { replace: true });
+  };
+
   return (
     <header ref={headerRef} className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md shadow-sm safe-area-top">
       <TopBar />
@@ -128,7 +135,7 @@ const Header = () => {
                     </Button>
                   </Link>
                   <Button
-                    onClick={logoutUser}
+                    onClick={handleLogout}
                     variant="ghost"
                     size="icon"
                     className="rounded-full hover:bg-red-100 hover:text-red-600"
@@ -420,10 +427,7 @@ const Header = () => {
                     {user?.name || "My Account"}
                   </Link>
                   <button
-                    onClick={() => {
-                      logoutUser();
-                      setIsMenuOpen(false);
-                    }}
+                    onClick={handleLogout}
                     className="px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors font-medium text-left flex items-center gap-2"
                   >
                     <LogOut className="w-4 h-4" />
