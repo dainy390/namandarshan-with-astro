@@ -12,22 +12,43 @@ interface User {
     banner?: string;
 }
 
+type AuthResult = { success: boolean, message?: string };
+type SocialLoginTokens = { accessToken?: string; access_token?: string; idToken?: string };
+type GoogleProfile = { email: string; name: string; socialId: string };
+
+interface GoogleUserInfoResponse {
+    email?: string;
+    email_verified?: boolean | string;
+    id?: string;
+    name?: string;
+    given_name?: string;
+    sub?: string;
+}
+
+interface AuthApiResponse {
+    success?: boolean;
+    message?: string;
+    token?: string;
+    user?: User;
+}
+
 interface AuthContextType {
     isUserAuthenticated: boolean;
     isAdminAuthenticated: boolean;
     user: User | null;
     admin: User | null;
     isLoading: boolean;
-    loginUser: (email: string, password?: string, role?: string) => Promise<{ success: boolean, message?: string }>;
-    signupUser: (email: string, password?: string, name?: string, role?: string) => Promise<{ success: boolean, message?: string }>;
+    loginUser: (email: string, password?: string, role?: string) => Promise<AuthResult>;
+    signupUser: (email: string, password?: string, name?: string, role?: string) => Promise<AuthResult>;
     loginAdmin: (email: string, password?: string) => boolean; // Keeping mock admin for now or adjust later
     logoutUser: () => void;
     logoutAdmin: () => void;
     // New Advanced Auth Methods
-    sendOtp: (email: string) => Promise<{ success: boolean, message?: string }>;
-    verifyOtp: (email: string, otp: string) => Promise<{ success: boolean, message?: string }>;
-    socialLogin: (provider: string, email: string, name: string, socialId: string, role?: string) => Promise<{ success: boolean, message?: string }>;
-    updateUserProfile: (updates: Partial<User>) => Promise<{ success: boolean, message?: string }>;
+    sendOtp: (email: string, role?: string) => Promise<AuthResult>;
+    verifyOtp: (email: string, otp: string, role?: string) => Promise<AuthResult>;
+    socialLogin: (provider: string, email?: string, name?: string, socialId?: string, role?: string, tokens?: SocialLoginTokens) => Promise<AuthResult>;
+    loginWithGoogle: (accessToken: string, role?: string) => Promise<AuthResult>;
+    updateUserProfile: (updates: Partial<User>) => Promise<AuthResult>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -77,7 +98,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    const handleAuthSuccess = async (data: any) => {
+    const handleAuthSuccess = async (data: AuthApiResponse): Promise<AuthResult> => {
         if (data.success && data.token) {
             localStorage.setItem('userToken', data.token);
             // Fetch full profile immediately to ensure all fields like avatar/banner are present 
@@ -88,7 +109,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { success: false, message: data.message || "Authentication failed" };
     };
 
-    const signupUser = async (email: string, password?: string, name?: string, role: string = 'user'): Promise<{ success: boolean, message?: string }> => {
+    const signupUser = async (email: string, password?: string, name?: string, role: string = 'user'): Promise<AuthResult> => {
         try {
             const res = await fetch(getApiUrl('/api/auth/signup'), {
                 method: 'POST',
@@ -97,13 +118,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
             const data = await res.json();
             return await handleAuthSuccess(data);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
             return { success: false, message: "Network error occurred." };
         }
     };
 
-    const loginUser = async (email: string, password?: string, role: string = 'user'): Promise<{ success: boolean, message?: string }> => {
+    const loginUser = async (email: string, password?: string, role: string = 'user'): Promise<AuthResult> => {
         try {
             const res = await fetch(getApiUrl('/api/auth/login'), {
                 method: 'POST',
@@ -112,54 +133,95 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
             const data = await res.json();
             return await handleAuthSuccess(data);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
             return { success: false, message: "Network error occurred." };
         }
     };
 
-    const sendOtp = async (email: string): Promise<{ success: boolean, message?: string }> => {
+    const sendOtp = async (email: string, role: string = 'user'): Promise<AuthResult> => {
         try {
             const res = await fetch(getApiUrl('/api/auth/send-otp'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
+                body: JSON.stringify({ email, role })
             });
             const data = await res.json();
             return { success: data.success, message: data.message };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
             return { success: false, message: "Network error occurred." };
         }
     };
 
-    const verifyOtp = async (email: string, otp: string): Promise<{ success: boolean, message?: string }> => {
+    const verifyOtp = async (email: string, otp: string, role: string = 'user'): Promise<AuthResult> => {
         try {
             const res = await fetch(getApiUrl('/api/auth/verify-otp'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, otp })
+                body: JSON.stringify({ email, otp, role })
             });
             const data = await res.json();
             return await handleAuthSuccess(data);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
             return { success: false, message: "Network error occurred." };
         }
     };
 
-    const socialLogin = async (provider: string, email: string, name: string, socialId: string, role: string = 'user'): Promise<{ success: boolean, message?: string }> => {
+    const socialLogin = async (
+        provider: string,
+        email: string = '',
+        name: string = '',
+        socialId: string = '',
+        role: string = 'user',
+        tokens: SocialLoginTokens = {}
+    ): Promise<AuthResult> => {
         try {
             const res = await fetch(getApiUrl('/api/auth/social-login'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider, email, name, socialId, role })
+                body: JSON.stringify({ provider, email, name, socialId, role, ...tokens })
             });
             const data = await res.json();
             return await handleAuthSuccess(data);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
             return { success: false, message: "Network error occurred." };
+        }
+    };
+
+    const getGoogleProfile = async (accessToken: string): Promise<GoogleProfile> => {
+        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+
+        if (!res.ok) {
+            throw new Error('Unable to read Google profile.');
+        }
+
+        const profile = await res.json() as GoogleUserInfoResponse;
+        const email = String(profile.email || '').trim().toLowerCase();
+        const socialId = String(profile.sub || profile.id || '').trim();
+        const name = String(profile.name || profile.given_name || '').trim();
+
+        if (!email || !socialId || profile.email_verified === false || profile.email_verified === 'false') {
+            throw new Error('Google account did not return a verified email profile.');
+        }
+
+        return { email, name, socialId };
+    };
+
+    const loginWithGoogle = async (accessToken: string, role: string = 'user'): Promise<AuthResult> => {
+        try {
+            const profile = await getGoogleProfile(accessToken);
+            return socialLogin('google', profile.email, profile.name, profile.socialId, role, {
+                accessToken,
+                access_token: accessToken
+            });
+        } catch (err: unknown) {
+            console.error(err);
+            return { success: false, message: err instanceof Error ? err.message : "Google login failed." };
         }
     };
 
@@ -175,7 +237,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return false;
     };
 
-    const updateUserProfile = async (updates: Partial<User>): Promise<{ success: boolean, message?: string }> => {
+    const updateUserProfile = async (updates: Partial<User>): Promise<AuthResult> => {
         try {
             const token = localStorage.getItem('userToken');
             if (!token) return { success: false, message: "Not authorized" };
@@ -202,7 +264,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 return { success: true, message: "Profile updated successfully" };
             }
             return { success: false, message: data.message || "Update failed" };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
             return { success: false, message: "Network error occurred." };
         }
@@ -229,7 +291,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         <AuthContext.Provider value={{
             isUserAuthenticated, isAdminAuthenticated, user, admin, isLoading,
             loginUser, signupUser, loginAdmin, logoutUser, logoutAdmin,
-            sendOtp, verifyOtp, socialLogin, updateUserProfile
+            sendOtp, verifyOtp, socialLogin, loginWithGoogle, updateUserProfile
         }}>
             {children}
         </AuthContext.Provider>

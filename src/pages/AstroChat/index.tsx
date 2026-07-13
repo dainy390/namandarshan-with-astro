@@ -7,11 +7,11 @@ import SessionTimer from "@/components/session/sessionTimer";
 import { useAuth } from "@/context/AuthContext";
 import { useSocket } from "@/context/SocketContext";
 import { useWallet } from "@/context/WalletContext";
-import { getApiUrl, readJsonResponse } from "@/utils/api";
 import { canStartConsultation } from "@/utils/consultationAccess";
 import {
   FinalizeWalletSessionResponse,
   finalizeWalletConsultationSession,
+  markPanditJoinedConsultationSession,
   startWalletConsultationSession,
   submitConsultationFeedback,
 } from "@/utils/consultationSession";
@@ -29,6 +29,16 @@ type BookingSessionResponse = {
     customerName?: string;
     customerEmail?: string;
   };
+  session?: {
+    remainingSeconds?: number;
+    status?: string;
+  };
+};
+
+type ConsultationAutoEndedPayload = {
+  bookingId?: string;
+  roomId?: string;
+  message?: string;
 };
 
 const DEFAULT_SESSION_SECONDS = 300;
@@ -41,6 +51,9 @@ const getFinalizedDebitAmount = (result?: FinalizeWalletSessionResponse | null) 
   const amount = Number(result?.amountDebited ?? result?.walletDebitedAmount ?? result?.debitAmount ?? 0);
   return Number.isFinite(amount) && amount >= 0 ? amount : 0;
 };
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 const AstroChat = () => {
   const navigate = useNavigate();
@@ -122,11 +135,9 @@ const AstroChat = () => {
 
     const loadBookingDevotee = async () => {
       try {
-        const response = await fetch(getApiUrl(`/api/bookings/${encodeURIComponent(activeBookingId)}/session`), {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const payload = await readJsonResponse<BookingSessionResponse>(response);
+        const payload: BookingSessionResponse = await markPanditJoinedConsultationSession(activeBookingId);
         const customerName = payload.booking?.customerName?.trim();
+        const remainingSeconds = Number(payload.session?.remainingSeconds);
 
         if (!cancelled && customerName) {
           setResolvedDevotee((prev) => ({
@@ -134,8 +145,16 @@ const AstroChat = () => {
             name: customerName,
           }));
         }
+
+        if (!cancelled && Number.isFinite(remainingSeconds) && remainingSeconds > 0) {
+          setEffectiveSessionSeconds(remainingSeconds);
+        }
       } catch (error) {
         console.error("[AstroChat] Failed to load booking devotee:", error);
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Unable to join this chat.");
+          navigate("/pandit-dashboard", { replace: true });
+        }
       }
     };
 
@@ -144,7 +163,7 @@ const AstroChat = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeBookingId, isPandit]);
+  }, [activeBookingId, isPandit, navigate]);
 
   const finalizeSession = useCallback(async ({ showToast = false }: { showToast?: boolean } = {}) => {
     if (isPandit || hasFinalizedRef.current) return null;
@@ -221,8 +240,8 @@ const AstroChat = () => {
         activeBookingIdRef.current = started.bookingId;
         setActiveBookingId(started.bookingId);
         setEffectiveSessionSeconds(started.durationSeconds);
-      } catch (error: any) {
-        toast.error(error?.message || "Unable to start consultation.");
+      } catch (error: unknown) {
+        toast.error(getErrorMessage(error, "Unable to start consultation."));
         navigate("/devotee-dashboard", { replace: true });
       } finally {
         if (!cancelled) setIsStartingSession(false);
@@ -278,11 +297,30 @@ const AstroChat = () => {
       setMessages((prev) => [...prev, msg]);
     };
 
+    const handleAutoEnded = (payload: ConsultationAutoEndedPayload) => {
+      const matchesBooking = payload.bookingId && payload.bookingId === activeBookingIdRef.current;
+      const matchesRoom = payload.roomId && payload.roomId === roomId;
+      if (!matchesBooking && !matchesRoom) return;
+
+      hasFinalizedRef.current = true;
+      setSessionEnded(true);
+      setIsEndingSession(false);
+      setFinalizedDebitAmount(0);
+      void refreshBalance();
+      toast.error(payload.message || "Pandit did not join within 1 minute. This chat has ended.");
+
+      if (isPandit) {
+        navigate("/pandit-dashboard", { replace: true });
+      }
+    };
+
     socket.on("chat:message", handleIncoming);
+    socket.on("consultation:auto-ended", handleAutoEnded);
     return () => {
       socket.off("chat:message", handleIncoming);
+      socket.off("consultation:auto-ended", handleAutoEnded);
     };
-  }, [socket]);
+  }, [isPandit, navigate, refreshBalance, roomId, socket]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -359,8 +397,8 @@ const AstroChat = () => {
       });
       toast.success("Thanks for your feedback!");
       navigate("/devotee-dashboard");
-    } catch (error: any) {
-      toast.error(error?.message || "Unable to submit feedback.");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Unable to submit feedback."));
     } finally {
       setIsSubmittingFeedback(false);
     }

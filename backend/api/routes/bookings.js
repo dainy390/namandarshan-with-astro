@@ -3,10 +3,8 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const { randomUUID } = require("crypto");
 const BookingSchema = require("../models/Booking.js");
-const WalletSchema = require('../models/Wallet');
 const PanditProfileSchema = require('../models/PanditProfile.js');
 const Booking = mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
-const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
 const PanditProfile =
   mongoose.models.PanditProfile || mongoose.model('PanditProfile', PanditProfileSchema);
 
@@ -14,6 +12,13 @@ const { createPaymentOrder, publicCheckoutOrder } = require("../services/payment
 const { notifyPanditBookingRequest } = require("../services/panditRequestNotifications.js");
 const { readAuthSession, recordWalletSpendForSession } = require("../middleware/auth.js");
 const { getWalletDebitAmount, shouldDebitWalletForBooking } = require("../utils/bookingBilling.js");
+const {
+  PANDIT_JOIN_GRACE_MS,
+  autoEndIfPanditNoShow,
+  clearPanditJoinTimeout,
+  schedulePanditJoinTimeout,
+} = require("../services/consultationAutoEnd.js");
+const { getVerifiedWalletBalance } = require("../services/walletIntegrity.js");
 
 const signalTypes = new Set(["ready", "offer", "answer", "candidate", "leave"]);
 function createBookingId() {
@@ -162,10 +167,15 @@ function sessionSnapshot(booking) {
   const endsAt = sessionEndsAt(booking);
   const remainingSeconds = Math.max(0, Math.ceil((endsAt.getTime() - Date.now()) / 1000));
   const status = booking.status === "completed" || remainingSeconds <= 0 ? "completed" : "active";
+  const panditJoinedAt = toDate(booking.panditJoinedAt);
+  const autoEndAt = new Date(startedAt.getTime() + PANDIT_JOIN_GRACE_MS);
 
   return {
     startedAt: startedAt.toISOString(),
     endsAt: endsAt.toISOString(),
+    autoEndAt: panditJoinedAt || status === "completed" ? null : autoEndAt.toISOString(),
+    panditJoinedAt: panditJoinedAt?.toISOString() || null,
+    waitingForPandit: !panditJoinedAt && status !== "completed",
     remainingSeconds,
     durationMinutes: Math.max(1, Number(booking.durationMinutes) || 5),
     status
@@ -195,6 +205,9 @@ function toSerializableBooking(booking) {
     paidAt: toIso(item.paidAt),
     sessionStartedAt: toIso(item.sessionStartedAt) || session.startedAt,
     sessionEndsAt: toIso(item.sessionEndsAt) || session.endsAt,
+    panditJoinedAt: toIso(item.panditJoinedAt),
+    endedReason: item.endedReason || "",
+    autoEndedAt: toIso(item.autoEndedAt),
     birthDate: item.birthDate,
     birthTime: item.birthTime,
     place: item.place,
@@ -279,8 +292,7 @@ async function ensureWalletHasBalance(req, session, res) {
     return false;
   }
 
-  const wallet = await Wallet.findOne({ userId: session.id }).lean();
-  const balance = Number(wallet?.balance ?? 0);
+  const { balance } = await getVerifiedWalletBalance(session.id);
 
   if (!Number.isFinite(balance) || balance <= 0) {
     res.status(403).json({ message: 'Add money to your wallet to start this consultation.' });
@@ -307,10 +319,19 @@ async function saveBooking(req, booking) {
 async function syncExpiredSession(req, booking) {
   ensureSessionFields(booking);
 
+  const noShowResult = await autoEndIfPanditNoShow(req, booking);
+  if (noShowResult.ended) {
+    return sessionSnapshot(booking);
+  }
+
   const snapshot = sessionSnapshot(booking);
   if (snapshot.status === "completed" && booking.status !== "completed") {
     booking.status = "completed";
     await saveBooking(req, booking);
+  }
+
+  if (snapshot.status === "completed") {
+    clearPanditJoinTimeout(booking.bookingId);
   }
 
   if (snapshot.status === "completed" && shouldDebitWalletForBooking(booking, sessionEndsAt(booking))) {
@@ -534,6 +555,7 @@ router.post("/wallet-session", async (req, res, next) => {
       panditEmail: astrologer.email,
       panditName: astrologer.name,
     });
+    schedulePanditJoinTimeout(req, booking, Booking);
 
     res.status(201).json({
       success: true,
@@ -566,6 +588,70 @@ router.get("/:bookingId/session", async (req, res, next) => {
   }
 });
 
+router.post("/:bookingId/join", async (req, res, next) => {
+  try {
+    const booking = await findBooking(req, req.params.bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking was not found." });
+    }
+
+    const participant = await readParticipant(req, res, booking);
+    if (!participant) return;
+
+    if (participant.participantRole !== "astrologer") {
+      return res.status(403).json({ success: false, message: "Only the assigned pandit can join this session." });
+    }
+
+    ensureSessionFields(booking);
+
+    const noShowResult = await autoEndIfPanditNoShow(req, booking);
+    if (noShowResult.ended) {
+      return res.status(409).json({
+        success: false,
+        message: "This session has already ended because the pandit did not join within 1 minute.",
+        booking: toSerializableBooking(booking),
+        session: sessionSnapshot(booking),
+      });
+    }
+
+    const session = sessionSnapshot(booking);
+    if (session.status === "completed") {
+      clearPanditJoinTimeout(booking.bookingId);
+      return res.status(409).json({
+        success: false,
+        message: "This session has already ended.",
+        booking: toSerializableBooking(booking),
+        session,
+      });
+    }
+
+    if (!booking.panditJoinedAt) {
+      booking.panditJoinedAt = new Date();
+    }
+    booking.status = booking.status === "confirmed" ? "active" : booking.status;
+    await saveBooking(req, booking);
+    clearPanditJoinTimeout(booking.bookingId);
+
+    const io = req.app.get("io");
+    io?.to(booking.bookingId).emit("consultation:pandit-joined", {
+      bookingId: booking.bookingId,
+      roomId: booking.bookingId,
+      mode: booking.mode,
+      panditJoinedAt: toIso(booking.panditJoinedAt),
+    });
+
+    res.json({
+      success: true,
+      message: "Pandit joined this consultation.",
+      booking: toSerializableBooking(booking),
+      session: sessionSnapshot(booking),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/finalize", async (req, res, next) => {
   try {
     const session = readAuthSession(req);
@@ -593,6 +679,7 @@ router.post("/finalize", async (req, res, next) => {
     }
     booking.status = "completed";
     await saveBooking(req, booking);
+    clearPanditJoinTimeout(booking.bookingId);
 
     const spendResult = await finalizeCompletedSession(req, booking);
     const debitAmount =
@@ -629,6 +716,7 @@ router.post("/:bookingId/finalize", async (req, res, next) => {
     }
     booking.status = "completed";
     await saveBooking(req, booking);
+    clearPanditJoinTimeout(booking.bookingId);
 
     const spendResult = await finalizeCompletedSession(req, booking);
     const debitAmount =

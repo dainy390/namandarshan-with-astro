@@ -1,14 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const WalletSchema = require('../models/Wallet');
 const BookingSchema = require('../models/Booking');
 const PanditProfileSchema = require('../models/PanditProfile');
 const User = require('../models/User');
 const { readAuthSession } = require('../middleware/auth');
 const { notifyPanditBookingRequest } = require('../services/panditRequestNotifications');
+const {
+    PANDIT_JOIN_GRACE_MS,
+    schedulePanditJoinTimeout,
+} = require('../services/consultationAutoEnd');
+const {
+    creditWallet,
+    getVerifiedWalletBalance,
+} = require('../services/walletIntegrity');
 
-const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
 const Booking = mongoose.models.Booking || mongoose.model('Booking', BookingSchema);
 const PanditProfile =
     mongoose.models.PanditProfile || mongoose.model('PanditProfile', PanditProfileSchema);
@@ -75,6 +81,9 @@ function toSerializableBooking(booking) {
         status: item.status,
         sessionStartedAt: item.sessionStartedAt?.toISOString?.() || item.sessionStartedAt || null,
         sessionEndsAt: item.sessionEndsAt?.toISOString?.() || item.sessionEndsAt || null,
+        panditJoinedAt: item.panditJoinedAt?.toISOString?.() || item.panditJoinedAt || null,
+        endedReason: item.endedReason || '',
+        autoEndedAt: item.autoEndedAt?.toISOString?.() || item.autoEndedAt || null,
     };
 }
 
@@ -85,13 +94,21 @@ function sessionSnapshot(booking) {
         startedAt.getTime() + Math.max(1, Number(booking.durationMinutes) || 5) * 60 * 1000
     );
     const remainingSeconds = Math.max(0, Math.ceil((endsAt.getTime() - Date.now()) / 1000));
+    const panditJoinedAt = booking.panditJoinedAt ? new Date(booking.panditJoinedAt) : null;
+    const hasPanditJoined = panditJoinedAt && !Number.isNaN(panditJoinedAt.getTime());
+    const status = booking.status === 'completed' || remainingSeconds <= 0 ? 'completed' : 'active';
 
     return {
         startedAt: startedAt.toISOString(),
         endsAt: endsAt.toISOString(),
+        autoEndAt: hasPanditJoined || status === 'completed'
+            ? null
+            : new Date(startedAt.getTime() + PANDIT_JOIN_GRACE_MS).toISOString(),
+        panditJoinedAt: hasPanditJoined ? panditJoinedAt.toISOString() : null,
+        waitingForPandit: !hasPanditJoined && status !== 'completed',
         remainingSeconds,
         durationMinutes: Math.max(1, Number(booking.durationMinutes) || 5),
-        status: booking.status === 'completed' || remainingSeconds <= 0 ? 'completed' : 'active',
+        status,
     };
 }
 
@@ -104,8 +121,7 @@ async function startWalletSession(req, res) {
     }
 
     try {
-        const wallet = await Wallet.findOne({ userId: session.id }).lean();
-        const balance = Number(wallet?.balance ?? 0);
+        const { balance } = await getVerifiedWalletBalance(session.id);
 
         if (!Number.isFinite(balance) || balance <= 0) {
             return res.status(403).json({ success: false, message: 'Add money to your wallet to start this consultation.' });
@@ -168,6 +184,7 @@ async function startWalletSession(req, res) {
             panditEmail: profile.email,
             panditName: profile.displayName,
         });
+        schedulePanditJoinTimeout(req, booking, Booking);
 
         res.status(201).json({
             success: true,
@@ -186,11 +203,11 @@ router.get('/balance', async (req, res) => {
     if (!session) return;
 
     try {
-        const wallet = await Wallet.findOne({ userId: session.id }).lean();
+        const { balance, wallet } = await getVerifiedWalletBalance(session.id);
         res.status(200).json({
             success: true,
-            balance: Number(wallet?.balance) || 0,
-            wallet: wallet || { userId: session.id, balance: 0 }
+            balance,
+            wallet
         });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error fetching wallet balance', error });
@@ -206,8 +223,7 @@ router.post('/create', async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const wallet = new Wallet({ userId });
-        await wallet.save();
+        const { wallet } = await getVerifiedWalletBalance(userId);
         res.status(201).json(wallet);
     } catch (error) {
         res.status(500).json({ message: 'Error creating wallet', error });
@@ -218,10 +234,7 @@ router.post('/create', async (req, res) => {
 router.get('/:userId', async (req, res) => {
     const { userId } = req.params;
     try {
-        const wallet = await Wallet.findOne({ userId });
-        if (!wallet) {
-            return res.status(404).json({ message: 'Wallet not found' });
-        }
+        const { wallet } = await getVerifiedWalletBalance(userId);
         res.status(200).json(wallet);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching wallet', error });
@@ -230,21 +243,10 @@ router.get('/:userId', async (req, res) => {
 
 // Update wallet balance for a user
 router.put('/:userId', async (req, res) => {
-    const { userId } = req.params; 
-    const { balance } = req.body;
-    try {
-        const wallet = await Wallet.findOneAndUpdate(
-            { userId },
-            { balance },
-            { new: true }
-        );
-        if (!wallet) {
-            return res.status(404).json({ message: 'Wallet not found' });
-        }
-        res.status(200).json(wallet);
-    } catch (error) {
-        res.status(500).json({ message: 'Error updating wallet', error });
-    }
+    res.status(403).json({
+        success: false,
+        message: 'Direct wallet balance edits are disabled. Use a signed recharge or spend transaction.'
+    });
 });
 
 // Recharge the wallet balance for a user
@@ -258,12 +260,13 @@ router.post('/recharge', async (req, res) => {
     }
 
     try {
-        const wallet = await Wallet.findOneAndUpdate(
-            { userId: session.id },
-            { $inc: { balance: amount } },
-            { new: true, upsert: true, setDefaultsOnInsert: true }
-        );
-        res.status(200).json({ success: true, balance: wallet.balance, wallet });
+        const result = await creditWallet({
+            userId: session.id,
+            amount,
+            source: 'manual-recharge-route',
+            description: 'Wallet recharge route'
+        });
+        res.status(200).json({ success: true, balance: result.balance, wallet: result.wallet });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error recharging wallet', error });
     }

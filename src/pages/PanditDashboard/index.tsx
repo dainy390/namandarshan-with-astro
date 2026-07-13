@@ -21,6 +21,7 @@ import { getApiUrl, readJsonResponse } from "@/utils/api";
 import { useAuth } from "@/context/AuthContext";
 import { useSocket } from "@/context/SocketContext";
 import { Button } from "@/components/ui/button";
+import { markPanditJoinedConsultationSession } from "@/utils/consultationSession";
 
 type RangeOption = "7d" | "30d" | "90d" | "all";
 
@@ -221,6 +222,10 @@ function isOpenRequestStatus(status: string) {
   return ["active", "confirmed"].includes(String(status || "").toLowerCase());
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 const MetricCard = ({
   title,
   value,
@@ -261,6 +266,7 @@ const PanditDashboard = () => {
   const [profileError, setProfileError] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<PanditBookingNotification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [joiningBookingId, setJoiningBookingId] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, isUserAuthenticated, isLoading: authLoading, logoutUser } = useAuth();
   const { socket, isConnected } = useSocket();
@@ -294,9 +300,9 @@ const PanditDashboard = () => {
       }
 
       setData(payload);
-    } catch (loadError: any) {
+    } catch (loadError: unknown) {
       if (!silent) {
-        setError(loadError?.message || "Unable to load dashboard.");
+        setError(getErrorMessage(loadError, "Unable to load dashboard."));
         setData(null);
       }
     } finally {
@@ -333,8 +339,8 @@ const PanditDashboard = () => {
         isActive: nextProfile.isActive !== false,
       });
       setProfileError(null);
-    } catch (loadError: any) {
-      setProfileError(loadError?.message || "Unable to load profile.");
+    } catch (loadError: unknown) {
+      setProfileError(getErrorMessage(loadError, "Unable to load profile."));
     }
   }, []);
 
@@ -441,11 +447,20 @@ const PanditDashboard = () => {
       void loadDashboard({ silent: true });
     };
 
+    const handleBookingEnded = (payload: { bookingId?: string; message?: string }) => {
+      if (!payload.bookingId) return;
+      setNotifications((prev) => prev.filter((item) => item.bookingId !== payload.bookingId));
+      toast.message(payload.message || "A consultation request has ended.");
+      void loadDashboard({ silent: true });
+    };
+
     socket.on("pandit:booking-request", handleBookingRequest);
+    socket.on("pandit:booking-ended", handleBookingEnded);
 
     return () => {
       socket.emit("pandit:unsubscribe", { panditId: currentPanditId });
       socket.off("pandit:booking-request", handleBookingRequest);
+      socket.off("pandit:booking-ended", handleBookingEnded);
     };
   }, [currentPanditId, dashboardLabel, isConnected, loadDashboard, socket]);
 
@@ -454,7 +469,7 @@ const PanditDashboard = () => {
     navigate("/", { replace: true });
   };
 
-  const updateProfileField = (field: keyof typeof emptyProfileForm, value: any) => {
+  const updateProfileField = (field: keyof typeof emptyProfileForm, value: string | boolean) => {
     setProfileForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -498,47 +513,69 @@ const PanditDashboard = () => {
       setProfile(payload.profile);
       toast.success("Pandit profile saved.");
       await loadDashboard();
-    } catch (saveError: any) {
-      setProfileError(saveError?.message || "Unable to save profile.");
+    } catch (saveError: unknown) {
+      setProfileError(getErrorMessage(saveError, "Unable to save profile."));
     } finally {
       setIsSavingProfile(false);
     }
   };
 
-  const joinBooking = (booking: RecentBooking) => {
-    const astrologer = {
-      id: booking.astrologerId,
-      name: booking.astrologerName,
-      avatar: profile?.avatar || profile?.image || "/assets/pandit-assistant.png",
-      image: profile?.image || profile?.avatar || "/assets/pandit-assistant.png",
-    };
-    const durationSeconds = Math.max(1, Number(booking.durationMinutes) || 5) * 60;
+  const joinBooking = async (booking: RecentBooking) => {
+    if (!isOpenRequestStatus(booking.status)) {
+      toast.error("This consultation has already ended.");
+      return;
+    }
 
-    if (booking.mode === "chat") {
-      navigate("/astro-chat", {
+    if (joiningBookingId) return;
+
+    setJoiningBookingId(booking.bookingId);
+
+    try {
+      const joined = await markPanditJoinedConsultationSession(booking.bookingId);
+      const remainingSeconds = Number(joined.session?.remainingSeconds);
+      const durationSeconds =
+        Number.isFinite(remainingSeconds) && remainingSeconds > 0
+          ? remainingSeconds
+          : Math.max(1, Number(booking.durationMinutes) || 5) * 60;
+
+      const astrologer = {
+        id: booking.astrologerId,
+        name: booking.astrologerName,
+        avatar: profile?.avatar || profile?.image || "/assets/pandit-assistant.png",
+        image: profile?.image || profile?.avatar || "/assets/pandit-assistant.png",
+      };
+
+      if (booking.mode === "chat") {
+        navigate("/astro-chat", {
+          state: {
+            bookingId: booking.bookingId,
+            roomId: booking.bookingId,
+            astrologer,
+            devotee: {
+              name: booking.customerName || "Devotee",
+              email: booking.customerEmail || "",
+            },
+            durationSeconds,
+          },
+        });
+        return;
+      }
+
+      navigate("/astro-call", {
         state: {
           bookingId: booking.bookingId,
           roomId: booking.bookingId,
           astrologer,
-          devotee: {
-            name: booking.customerName || "Devotee",
-            email: booking.customerEmail || "",
-          },
           durationSeconds,
+          joinExisting: true,
         },
       });
-      return;
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Unable to join this consultation."));
+      void loadDashboard({ silent: true });
+    } finally {
+      setJoiningBookingId(null);
     }
-
-    navigate("/astro-call", {
-      state: {
-        bookingId: booking.bookingId,
-        roomId: booking.bookingId,
-        astrologer,
-        durationSeconds,
-        joinExisting: true,
-      },
-    });
   };
 
   const joinNotification = (notification: PanditBookingNotification) => {
@@ -546,7 +583,7 @@ const PanditDashboard = () => {
       prev.map((item) => item.bookingId === notification.bookingId ? { ...item, unread: false } : item)
     );
     setIsNotificationsOpen(false);
-    joinBooking({
+    void joinBooking({
       bookingId: notification.bookingId,
       astrologerId: notification.astrologerId,
       astrologerName: notification.astrologerName,
@@ -1036,7 +1073,11 @@ const PanditDashboard = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {data?.recentBookings?.length ? (
-                  data.recentBookings.map((booking) => (
+                  data.recentBookings.map((booking) => {
+                    const canJoin = isOpenRequestStatus(booking.status);
+                    const isJoining = joiningBookingId === booking.bookingId;
+
+                    return (
                     <tr key={booking.bookingId} className="hover:bg-slate-50">
                       <td className="px-5 py-4">
                         <p className="font-semibold text-slate-950">{booking.astrologerName || dashboardLabel}</p>
@@ -1062,19 +1103,23 @@ const PanditDashboard = () => {
                       <td className="px-5 py-4">
                         <button
                           type="button"
-                          onClick={() => joinBooking(booking)}
-                          className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+                          onClick={() => void joinBooking(booking)}
+                          disabled={!canJoin || isJoining || Boolean(joiningBookingId)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                         >
-                          {booking.mode === "call" ? (
+                          {isJoining ? (
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          ) : booking.mode === "call" ? (
                             <PhoneCall className="h-3.5 w-3.5" />
                           ) : (
                             <MessageCircle className="h-3.5 w-3.5" />
                           )}
-                          Join
+                          {isJoining ? "Joining..." : canJoin ? "Join" : "Ended"}
                         </button>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan={8} className="px-5 py-12 text-center text-sm font-medium text-slate-500">

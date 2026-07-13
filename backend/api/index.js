@@ -186,6 +186,16 @@ mongoose
   .then(() => {
     app.locals.mongoReady = true;
     console.log("MongoDB Connected");
+    const { sealExistingWallets } = require("./services/walletIntegrity");
+    sealExistingWallets()
+      .then(({ sealedCount }) => {
+        if (sealedCount > 0) {
+          console.log(`[WalletIntegrity] Sealed ${sealedCount} existing wallets.`);
+        }
+      })
+      .catch((error) => {
+        console.error("[WalletIntegrity] Failed to seal existing wallets:", error);
+      });
   })
   .catch((err) => {
     app.locals.mongoReady = false;

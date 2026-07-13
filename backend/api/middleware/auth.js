@@ -1,8 +1,6 @@
 // TODO: Replace with actual CRMUser model/collection lookup when available
 // For now, trust frontend role via x-user-id (session-based auth)
-const mongoose = require('mongoose');
-const WalletSchema = require('../models/Wallet');
-const Wallet = mongoose.models.Wallet || mongoose.model('Wallet', WalletSchema);
+const { creditWallet, debitWallet } = require('../services/walletIntegrity');
 
 const getUserFromHeader = (req) => {
   const userId = req.headers['x-user-id'];
@@ -49,13 +47,15 @@ async function creditWalletForSession(req, session, amount) {
     throw new Error('Invalid wallet recharge arguments');
   }
 
-  const wallet = await Wallet.findOneAndUpdate(
-    { userId },
-    { $inc: { balance: rechargeAmount } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
-  );
+  const result = await creditWallet({
+    userId,
+    amount: rechargeAmount,
+    source: 'payment',
+    sourceId: req?.body?.razorpay_payment_id || req?.body?.razorpay_order_id || '',
+    description: 'Wallet recharge'
+  });
 
-  return wallet.toObject ? wallet.toObject() : wallet;
+  return result.wallet;
 }
 
 async function recordWalletSpendForSession(req, session, amount) {
@@ -65,18 +65,16 @@ async function recordWalletSpendForSession(req, session, amount) {
     throw new Error('Invalid wallet spend arguments');
   }
 
-  const wallet = await Wallet.findOne({ userId });
-  if (!wallet) {
-    throw new Error('Wallet not found');
-  }
-
-  wallet.balance = Number(wallet.balance || 0) - spendAmount;
-  await wallet.save();
-  const walletObject = wallet.toObject ? wallet.toObject() : wallet;
+  const result = await debitWallet({
+    userId,
+    amount: spendAmount,
+    source: 'consultation',
+    description: 'Consultation wallet spend'
+  });
 
   return {
-    wallet: walletObject,
-    amountDebited: spendAmount,
+    wallet: result.wallet,
+    amountDebited: result.amountDebited,
   };
 }
 

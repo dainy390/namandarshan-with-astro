@@ -10,7 +10,12 @@ const WalletSchema = new mongoose.Schema(
         balance: {
             type: Number,
             default: 0
-        }
+        },
+        balanceSignature: String,
+        balanceSignatureVersion: String,
+        lastTransactionId: String,
+        ledgerInitializedAt: Date,
+        integrityCheckedAt: Date
     },
     { timestamps: true }
 );

@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 
 function calculateWalletDebitAmount(booking, endedAt = new Date()) {
   if (!booking) return 0;
+  if (booking.endedReason === 'pandit_no_show') return 0;
 
   const sessionStartedAt = booking.sessionStartedAt ? new Date(booking.sessionStartedAt) : null;
   if (!sessionStartedAt || Number.isNaN(sessionStartedAt.getTime())) return 0;

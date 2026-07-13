@@ -37,6 +37,27 @@ type StartWalletSessionResponse = {
   };
 };
 
+type ConsultationSession = {
+  startedAt?: string;
+  endsAt?: string;
+  autoEndAt?: string | null;
+  panditJoinedAt?: string | null;
+  waitingForPandit?: boolean;
+  remainingSeconds?: number;
+  durationMinutes?: number;
+  status?: "active" | "completed";
+};
+
+type MarkPanditJoinedResponse = {
+  success?: boolean;
+  message?: string;
+  booking?: {
+    bookingId?: string;
+    durationMinutes?: number;
+  };
+  session?: ConsultationSession;
+};
+
 export type FinalizeWalletSessionResponse = {
   success?: boolean;
   message?: string;
@@ -148,6 +169,23 @@ export const finalizeWalletConsultationSession = async (bookingId: string) => {
   const data = await readJsonResponse<FinalizeWalletSessionResponse>(response);
   if (!response.ok || data.success === false) {
     throw new Error(data.message || "Unable to finalize consultation.");
+  }
+
+  return data;
+};
+
+export const markPanditJoinedConsultationSession = async (bookingId: string) => {
+  const token = readUserToken();
+  const response = await fetch(getApiUrl(`/api/bookings/${encodeURIComponent(bookingId)}/join`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await readJsonResponse<MarkPanditJoinedResponse>(response);
+  if (!response.ok || data.success === false) {
+    throw new Error(data.message || "Unable to join this consultation.");
   }
 
   return data;

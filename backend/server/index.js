@@ -14,6 +14,7 @@ const { Server } = require("socket.io");
 const Booking = require("../api/models/Booking");
 const Lead = require("../api/models/Lead");
 const connectDB = require("../api/config/db.js");
+const { sealExistingWallets } = require("../api/services/walletIntegrity");
 
 let whatsappDb;
 let WhatsAppLead;
@@ -444,12 +445,24 @@ const initializeRoutes = () => {
     console.log('✓ Routes initialized');
 };
 
+const sealWalletsOnStartup = async () => {
+    try {
+        const { sealedCount } = await sealExistingWallets();
+        if (sealedCount > 0) {
+            console.log(`[WalletIntegrity] Sealed ${sealedCount} existing wallets.`);
+        }
+    } catch (error) {
+        console.error('[WalletIntegrity] Failed to seal existing wallets:', error);
+    }
+};
+
 // Start Server if running directly (e.g. Local or Render)
 // Vercel imports this file, so we don't want to listen there.
 if (require.main === module) {
     (async () => {
         try {
             await connectDB(app);
+            await sealWalletsOnStartup();
             initializeRoutes();
 
             // Start Newsletter Cron
@@ -467,6 +480,7 @@ if (require.main === module) {
 } else {
     // For Vercel, connect and initialize routes immediately
     connectDB(app).then(() => {
+        void sealWalletsOnStartup();
         initializeRoutes();
     }).catch(err => {
         console.error('Failed to initialize:', err);

@@ -8,7 +8,11 @@ import { useAuth } from "@/context/AuthContext";
 import { useSocket } from "@/context/SocketContext";
 import { useWallet } from "@/context/WalletContext";
 import { canStartConsultation } from "@/utils/consultationAccess";
-import { finalizeWalletConsultationSession, submitConsultationFeedback } from "@/utils/consultationSession";
+import {
+  finalizeWalletConsultationSession,
+  markPanditJoinedConsultationSession,
+  submitConsultationFeedback,
+} from "@/utils/consultationSession";
 
 interface WebRTCCallProps {
   bookingId?: string;
@@ -18,11 +22,20 @@ interface WebRTCCallProps {
 
 type SignalDescription = RTCSessionDescriptionInit;
 type SignalCandidate = RTCIceCandidateInit;
+type CallEndPayload = {
+  bookingId?: string;
+  roomId?: string;
+  reason?: string;
+  message?: string;
+};
 
 const iceServers: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
 ];
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error ? error.message : fallback;
 
 const WebRTCCall = ({
   bookingId: bookingIdProp,
@@ -209,6 +222,34 @@ const WebRTCCall = ({
   }, [hasWalletBalance, isPandit, navigate]);
 
   useEffect(() => {
+    if (!isPandit || !bookingId) return;
+
+    let cancelled = false;
+
+    const joinSession = async () => {
+      try {
+        const joined = await markPanditJoinedConsultationSession(bookingId);
+        const remainingSeconds = Number(joined.session?.remainingSeconds);
+        if (!cancelled && Number.isFinite(remainingSeconds) && remainingSeconds > 0) {
+          setSeconds(remainingSeconds);
+        }
+      } catch (error) {
+        console.error("[WebRTCCall] Failed to mark pandit joined:", error);
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : "Unable to join this call.");
+          navigate("/pandit-dashboard", { replace: true });
+        }
+      }
+    };
+
+    joinSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId, isPandit, navigate]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const startMedia = async () => {
@@ -334,8 +375,16 @@ const WebRTCCall = ({
       closePeerConnection();
     };
 
-    const handleRemoteEnd = () => {
-      toast.message("The call has ended.");
+    const handleRemoteEnd = (payload?: CallEndPayload) => {
+      const matchesBooking = payload?.bookingId && payload.bookingId === bookingId;
+      const matchesRoom = payload?.roomId && payload.roomId === roomId;
+      if (payload && (payload.bookingId || payload.roomId) && !matchesBooking && !matchesRoom) return;
+
+      if (payload?.reason === "pandit_no_show") {
+        toast.error(payload.message || "Pandit did not join within 1 minute. This call has ended.");
+      } else {
+        toast.message(payload?.message || "The call has ended.");
+      }
       void endCall(false);
     };
 
@@ -356,6 +405,7 @@ const WebRTCCall = ({
     };
   }, [
     callEnded,
+    bookingId,
     closePeerConnection,
     createAndSendOffer,
     endCall,
@@ -422,8 +472,8 @@ const WebRTCCall = ({
       });
       toast.success("Thanks for your feedback!");
       navigate("/devotee-dashboard", { replace: true });
-    } catch (error: any) {
-      toast.error(error?.message || "Unable to submit feedback.");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Unable to submit feedback."));
     } finally {
       setIsSubmittingFeedback(false);
     }

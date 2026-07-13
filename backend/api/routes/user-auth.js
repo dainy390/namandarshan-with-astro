@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
@@ -8,6 +9,7 @@ const { sendEmail } = require('../services/emailService');
 const JWT_SECRET = process.env.JWT_SECRET || 'namandarshan-secret';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const OTP_TTL_MS = 5 * 60 * 1000;
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const otpStore = new Map();
 
 const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
@@ -55,6 +57,62 @@ const scheduleOtpCleanup = (email) => {
   setTimeout(() => {
     otpStore.delete(email);
   }, OTP_TTL_MS + 1000);
+};
+
+const isEmailDeliveryConfigured = () => {
+  const configuredProvider = String(process.env.EMAIL_PROVIDER || '').trim().toLowerCase();
+
+  return Boolean(
+    (configuredProvider === 'smtp' && process.env.SMTP_HOST) ||
+    configuredProvider === 'ses' ||
+    process.env.SMTP_HOST ||
+    (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) ||
+    process.env.SES_ENABLED === 'true'
+  );
+};
+
+const verifyGoogleAccessToken = async (accessToken) => {
+  const token = String(accessToken || '').trim();
+  if (!token) {
+    const error = new Error('Google access token is required');
+    error.status = 400;
+    throw error;
+  }
+
+  try {
+    const response = await axios.get(GOOGLE_USERINFO_URL, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 8000,
+    });
+
+    const profile = response.data || {};
+    const email = normalizeEmail(profile.email);
+    const socialId = String(profile.sub || '').trim();
+
+    if (!email || !socialId) {
+      const error = new Error('Google account did not return a verified profile');
+      error.status = 401;
+      throw error;
+    }
+
+    if (profile.email_verified === false || profile.email_verified === 'false') {
+      const error = new Error('Google account email is not verified');
+      error.status = 401;
+      throw error;
+    }
+
+    return {
+      email,
+      socialId,
+      name: String(profile.name || profile.given_name || '').trim(),
+    };
+  } catch (error) {
+    if (error.status) throw error;
+
+    const authError = new Error('Google authentication failed');
+    authError.status = error.response?.status === 401 ? 401 : 502;
+    throw authError;
+  }
 };
 
 router.post('/signup', async (req, res) => {
@@ -140,19 +198,20 @@ router.post('/login', async (req, res) => {
 router.post('/send-otp', async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
+    const role = normalizeRole(req.body.role);
     if (!email) {
       return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(email, { otp, expiresAt: Date.now() + OTP_TTL_MS });
+    otpStore.set(email, { otp, role, expiresAt: Date.now() + OTP_TTL_MS });
     scheduleOtpCleanup(email);
 
     const subject = 'Your Naman Darshan OTP';
     const html = `<p>Your one-time password is: <strong>${otp}</strong></p><p>This code expires in 5 minutes.</p>`;
 
     try {
-      if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      if (isEmailDeliveryConfigured()) {
         await sendEmail(email, subject, html);
       } else {
         console.log(`OTP for ${email}: ${otp}`);
@@ -172,7 +231,7 @@ router.post('/send-otp', async (req, res) => {
 router.post('/verify-otp', async (req, res) => {
   try {
     const email = normalizeEmail(req.body.email);
-    const otp = String(req.body.otp || '');
+    const otp = String(req.body.otp || '').replace(/\D/g, '');
     if (!email || !otp) {
       return res.status(400).json({ success: false, message: 'Email and OTP are required' });
     }
@@ -183,12 +242,26 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     otpStore.delete(email);
+    const requestedRole = normalizeRole(req.body.role || stored.role);
     let user = await User.findOne({ email });
     if (!user) {
-      user = await User.create({ email, authProvider: 'otp', role: 'user' });
+      user = await User.create({ email, authProvider: 'otp', role: requestedRole });
     } else {
-      user.authProvider = user.authProvider || 'otp';
-      await user.save();
+      let shouldSaveUser = false;
+
+      if (!user.authProvider) {
+        user.authProvider = 'otp';
+        shouldSaveUser = true;
+      }
+
+      if (requestedRole === 'pandit' && user.role !== 'pandit') {
+        user.role = 'pandit';
+        shouldSaveUser = true;
+      }
+
+      if (shouldSaveUser) {
+        await user.save();
+      }
     }
 
     const token = createToken(user);
@@ -201,11 +274,21 @@ router.post('/verify-otp', async (req, res) => {
 
 router.post('/social-login', async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
-    const provider = String(req.body.provider || 'social');
-    const name = req.body.name;
-    const socialId = String(req.body.socialId || '');
+    const provider = String(req.body.provider || 'social').trim().toLowerCase();
     const role = normalizeRole(req.body.role);
+    let email = normalizeEmail(req.body.email);
+    let name = req.body.name;
+    let socialId = String(req.body.socialId || '');
+
+    if (provider === 'google') {
+      const googleAccessToken = req.body.accessToken || req.body.access_token;
+      if (googleAccessToken) {
+        const googleProfile = await verifyGoogleAccessToken(googleAccessToken);
+        email = googleProfile.email;
+        name = googleProfile.name || name;
+        socialId = googleProfile.socialId;
+      }
+    }
 
     if (!email || !socialId) {
       return res.status(400).json({ success: false, message: 'Provider, email, and socialId are required' });
@@ -226,7 +309,7 @@ router.post('/social-login', async (req, res) => {
     res.json({ success: true, message: 'Social login successful', token });
   } catch (error) {
     console.error('Social login error:', error);
-    res.status(500).json({ success: false, message: 'Social login failed' });
+    res.status(error.status || 500).json({ success: false, message: error.message || 'Social login failed' });
   }
 });
 

@@ -225,6 +225,11 @@ function getBookingDate(booking) {
 }
 
 function getBookingEarnings(booking) {
+  if (booking.endedReason === "pandit_no_show" || booking.paymentStatus === "no_show") return 0;
+  if (booking.paymentStatus === "wallet_pending" || booking.walletDebitedAmount != null) {
+    return asNumber(booking.walletDebitedAmount);
+  }
+
   return (
     asNumber(booking.walletDebitedAmount) ||
     asNumber(booking.amountPaid) ||
@@ -355,6 +360,7 @@ router.get(["/", "/summary"], async (req, res, next) => {
           "walletDebitedAmount",
           "paymentStatus",
           "status",
+          "endedReason",
           "paidAt",
           "sessionStartedAt",
           "sessionEndsAt",

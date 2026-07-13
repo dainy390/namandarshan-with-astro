@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { useGoogleLogin } from "@react-oauth/google";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { SafeGoogleLoginButton } from "@/components/common/SafeGoogleLoginButton";
 
 interface Props {
   isOpen: boolean;
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function LoginModal({ isOpen, onClose, onLoginSuccess, onSignup }: Props) {
-  const { loginUser, sendOtp, verifyOtp, socialLogin } = useAuth();
+  const { loginUser, sendOtp, verifyOtp, loginWithGoogle } = useAuth();
 
   const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
   const [identifier, setIdentifier] = useState(""); // email or mobile number
@@ -72,29 +72,22 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, onSignup }
     }
   };
 
-  const googleLogin = useGoogleLogin({
-    onSuccess: async (tokenResponse) => {
-      setIsSubmitting(true);
-      try {
-        const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-          headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-        });
-        const profile = await res.json();
-        const socialRes = await socialLogin("google", profile.email, profile.name, profile.sub);
-        if (socialRes.success) {
-          onLoginSuccess();
-          resetAndClose();
-        } else {
-          setError(socialRes.message || "Google login failed on server.");
-        }
-      } catch {
-        setError("Failed to fetch Google profile.");
-      } finally {
-        setIsSubmitting(false);
+  const handleGoogleToken = async (accessToken: string) => {
+    setIsSubmitting(true);
+    try {
+      const socialRes = await loginWithGoogle(accessToken);
+      if (socialRes.success) {
+        onLoginSuccess();
+        resetAndClose();
+      } else {
+        setError(socialRes.message || "Google login failed on server.");
       }
-    },
-    onError: () => setError("Google login failed."),
-  });
+    } catch {
+      setError("Google login failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -183,13 +176,14 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess, onSignup }
             <div className="flex-1 h-px bg-gray-200" />
           </div>
 
-          <button
-            onClick={() => googleLogin()}
+          <SafeGoogleLoginButton
+            onToken={handleGoogleToken}
+            onUnavailable={setError}
             disabled={isSubmitting}
-            className="w-full border rounded-lg py-3 font-medium hover:bg-gray-50 disabled:opacity-50"
+            className="w-full h-auto border rounded-lg py-3 font-medium hover:bg-gray-50 disabled:opacity-50"
           >
             Continue with Google
-          </button>
+          </SafeGoogleLoginButton>
 
           <button onClick={onSignup} className="w-full mt-4 text-orange-500">
             Create New Account

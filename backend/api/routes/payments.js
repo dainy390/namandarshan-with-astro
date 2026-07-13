@@ -14,6 +14,7 @@ const {
   readAuthSession
 } = require("../middleware/auth.js");
 const { notifyPanditBookingRequest } = require("../services/panditRequestNotifications.js");
+const { schedulePanditJoinTimeout } = require("../services/consultationAutoEnd.js");
 
 const router = Router();
 const Booking = mongoose.models.Booking || mongoose.model("Booking", BookingSchema);
@@ -57,6 +58,9 @@ function toSerializableBooking(booking) {
     paidAt: item.paidAt?.toISOString?.() || item.paidAt || null,
     sessionStartedAt: item.sessionStartedAt?.toISOString?.() || item.sessionStartedAt || null,
     sessionEndsAt: item.sessionEndsAt?.toISOString?.() || item.sessionEndsAt || null,
+    panditJoinedAt: item.panditJoinedAt?.toISOString?.() || item.panditJoinedAt || null,
+    endedReason: item.endedReason || "",
+    autoEndedAt: item.autoEndedAt?.toISOString?.() || item.autoEndedAt || null,
     birthDate: item.birthDate,
     birthTime: item.birthTime,
     place: item.place,
@@ -116,6 +120,7 @@ async function createBookingFromOrder(req, order, { paymentStatus, paymentId = n
       const serialized = toSerializableBooking(existing);
       if (shouldNotifyPandit) {
         void notifyPanditBookingRequest(req, serialized);
+        schedulePanditJoinTimeout(req, existing, Booking);
       }
 
       return serialized;
@@ -125,6 +130,7 @@ async function createBookingFromOrder(req, order, { paymentStatus, paymentId = n
     const serialized = toSerializableBooking(created);
     if (paymentStatus === "paid") {
       void notifyPanditBookingRequest(req, serialized);
+      schedulePanditJoinTimeout(req, created, Booking);
     }
 
     return serialized;

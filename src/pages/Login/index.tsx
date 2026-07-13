@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import Header from "@/components/layout/Header";
@@ -10,13 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import heroImage from "@/assets/hero-aarti.jpg";
-import { useGoogleLogin } from "@react-oauth/google";
 
 // import AppleLogin from 'react-apple-login';
-import { AtSign, Smartphone, Github, Mail } from "lucide-react";
+import { AtSign, Mail } from "lucide-react";
 import { getApiUrl } from "@/utils/api";
 import { toast } from "sonner";
 import { getPostAuthPath } from "@/utils/authRouting";
+import { SafeGoogleLoginButton } from "@/components/common/SafeGoogleLoginButton";
+
+type RedirectState = { from?: { pathname?: string } | string };
 
 const Login = () => {
     const [searchParams] = useSearchParams();
@@ -34,18 +36,33 @@ const Login = () => {
     const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [forgotMessage, setForgotMessage] = useState("");
 
-    const { loginUser, signupUser, sendOtp, verifyOtp, socialLogin, user } = useAuth();
+    const { loginUser, signupUser, sendOtp, verifyOtp, loginWithGoogle, user } = useAuth();
     const mode = searchParams.get("mode") || "login";
     const isFromGame = searchParams.get("isFromGame") === "true";
     const redirectUrl = searchParams.get("redirect");
 
     const navigate = useNavigate();
     const location = useLocation();
-    const from = (location.state as any)?.from?.pathname || (location.state as any)?.from || "/";
+    const redirectState = location.state as RedirectState | null;
+    const from =
+        typeof redirectState?.from === "string"
+            ? redirectState.from
+            : redirectState?.from?.pathname || "/";
+
+    const resetOtpState = useCallback(() => {
+        setOtp("");
+        setOtpSent(false);
+    }, []);
+
+    const handleAccountRoleChange = useCallback((role: "user" | "pandit") => {
+        setAccountRole(role);
+        resetOtpState();
+    }, [resetOtpState]);
 
     useEffect(() => {
         setAccountRole(searchParams.get("role") === "pandit" ? "pandit" : "user");
-    }, [searchParams]);
+        resetOtpState();
+    }, [resetOtpState, searchParams]);
 
     const handleSuccessfulAuth = (role?: string) => {
         const nextPath = getPostAuthPath({ role: role || user?.role, redirectUrl, from });
@@ -54,19 +71,27 @@ const Login = () => {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        const trimmedEmail = email.trim();
+
         if (loginMethod === "password") {
-            const res = await loginUser(email, password, accountRole);
+            const res = await loginUser(trimmedEmail, password, accountRole);
             if (res.success) handleSuccessfulAuth(accountRole);
             else toast.error(res.message || "Invalid credentials.");
         } else {
             if (!otpSent) {
-                const res = await sendOtp(email);
+                const res = await sendOtp(trimmedEmail, accountRole);
                 if (res.success) {
                     setOtpSent(true);
                     toast.success("OTP sent to your email!");
                 } else toast.error(res.message || "Failed to send OTP.");
             } else {
-                const res = await verifyOtp(email, otp);
+                const normalizedOtp = otp.replace(/\D/g, "");
+                if (normalizedOtp.length !== 6) {
+                    toast.error("Enter the 6-digit OTP sent to your email.");
+                    return;
+                }
+
+                const res = await verifyOtp(trimmedEmail, normalizedOtp, accountRole);
                 if (res.success) handleSuccessfulAuth(accountRole);
                 else toast.error(res.message || "Invalid OTP.");
             }
@@ -99,26 +124,15 @@ const Login = () => {
         }
     };
 
-    const googleLogin = useGoogleLogin({
-        onSuccess: async (tokenResponse) => {
-            if (!import.meta.env.VITE_GOOGLE_CLIENT_ID) {
-                toast.error("Google Client ID not configured. Please check .env file.");
-                return;
-            }
-            try {
-                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-                    headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-                });
-                const profile = await res.json();
-                const socialRes = await socialLogin('google', profile.email, profile.name, profile.sub, accountRole);
-                if (socialRes.success) handleSuccessfulAuth(accountRole);
-                else toast.error(socialRes.message || "Google Login failed on server.");
-            } catch (error) {
-                toast.error("Failed to fetch Google Profile");
-            }
-        },
-        onError: () => toast.error("Google Login Failed"),
-    });
+    const handleGoogleToken = async (accessToken: string) => {
+        try {
+            const socialRes = await loginWithGoogle(accessToken, accountRole);
+            if (socialRes.success) handleSuccessfulAuth(accountRole);
+            else toast.error(socialRes.message || "Google Login failed on server.");
+        } catch (error) {
+            toast.error("Google Login failed.");
+        }
+    };
 
 
 
@@ -205,8 +219,8 @@ const Login = () => {
 
                                     <TabsContent value="login">
                                         <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                                            <Button type="button" variant={accountRole === "user" ? "default" : "ghost"} className="w-full" onClick={() => setAccountRole("user")}>Devotee</Button>
-                                            <Button type="button" variant={accountRole === "pandit" ? "default" : "ghost"} className="w-full" onClick={() => setAccountRole("pandit")}>Pandit</Button>
+                                            <Button type="button" variant={accountRole === "user" ? "default" : "ghost"} className="w-full" onClick={() => handleAccountRoleChange("user")}>Devotee</Button>
+                                            <Button type="button" variant={accountRole === "pandit" ? "default" : "ghost"} className="w-full" onClick={() => handleAccountRoleChange("pandit")}>Pandit</Button>
                                         </div>
                                         {accountRole === "pandit" && (
                                             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -219,7 +233,10 @@ const Login = () => {
                                                     type="button"
                                                     variant={loginMethod === 'password' ? 'default' : 'outline'}
                                                     className="w-[48%]"
-                                                    onClick={() => setLoginMethod('password')}
+                                                    onClick={() => {
+                                                        setLoginMethod('password');
+                                                        resetOtpState();
+                                                    }}
                                                 >
                                                     <AtSign className="w-4 h-4 mr-2" /> Password
                                                 </Button>
@@ -227,7 +244,10 @@ const Login = () => {
                                                     type="button"
                                                     variant={loginMethod === 'otp' ? 'default' : 'outline'}
                                                     className="w-[48%]"
-                                                    onClick={() => setLoginMethod('otp')}
+                                                    onClick={() => {
+                                                        setLoginMethod('otp');
+                                                        resetOtpState();
+                                                    }}
                                                 >
                                                     <Mail className="w-4 h-4 mr-2" /> Email OTP
                                                 </Button>
@@ -241,7 +261,10 @@ const Login = () => {
                                                     required
                                                     placeholder="devotee@example.com"
                                                     value={email}
-                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    onChange={(e) => {
+                                                        setEmail(e.target.value);
+                                                        if (otpSent) resetOtpState();
+                                                    }}
                                                     className="bg-white"
                                                 />
                                             </div>
@@ -271,21 +294,24 @@ const Login = () => {
 
                                             {loginMethod === 'otp' && otpSent && (
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="otp">Enter 4-digit OTP</Label>
+                                                    <Label htmlFor="otp">Enter 6-digit OTP</Label>
                                                     <Input
                                                         id="otp"
                                                         type="text"
-                                                        maxLength={4}
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]{6}"
+                                                        maxLength={6}
+                                                        placeholder="123456"
                                                         required
                                                         className="bg-white text-center tracking-widest text-lg"
                                                         value={otp}
-                                                        onChange={(e) => setOtp(e.target.value)}
+                                                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                                                     />
                                                 </div>
                                             )}
 
                                             <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-lg py-6 mt-4">
-                                                {loginMethod === 'otp' && !otpSent ? 'Send OTP' : 'Sign In'}
+                                                {loginMethod === 'otp' ? (otpSent ? 'Verify OTP' : 'Send OTP') : 'Sign In'}
                                             </Button>
                                         </form>
 
@@ -300,14 +326,14 @@ const Login = () => {
                                             </div>
 
                                             <div className="mt-4">
-                                                <Button variant="outline" className="w-full" onClick={() => googleLogin()}>
+                                                <SafeGoogleLoginButton variant="outline" className="w-full" onToken={handleGoogleToken} onUnavailable={toast.error}>
                                                     <svg className="w-5 h-5" viewBox="0 0 24 24">
                                                         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                                                         <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
                                                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                                                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                                                     </svg>
-                                                </Button>
+                                                </SafeGoogleLoginButton>
 
                                         {/* 
                                         <AppleLogin
@@ -335,8 +361,8 @@ const Login = () => {
 
                                     <TabsContent value="signup">
                                         <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                                            <Button type="button" variant={accountRole === "user" ? "default" : "ghost"} className="w-full" onClick={() => setAccountRole("user")}>Devotee</Button>
-                                            <Button type="button" variant={accountRole === "pandit" ? "default" : "ghost"} className="w-full" onClick={() => setAccountRole("pandit")}>Pandit</Button>
+                                            <Button type="button" variant={accountRole === "user" ? "default" : "ghost"} className="w-full" onClick={() => handleAccountRoleChange("user")}>Devotee</Button>
+                                            <Button type="button" variant={accountRole === "pandit" ? "default" : "ghost"} className="w-full" onClick={() => handleAccountRoleChange("pandit")}>Pandit</Button>
                                         </div>
                                         {accountRole === "pandit" && (
                                             <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -395,14 +421,14 @@ const Login = () => {
                                             </div>
 
                                             <div className="mt-4">
-                                                <Button variant="outline" className="w-full" onClick={() => googleLogin()}>
+                                                <SafeGoogleLoginButton variant="outline" className="w-full" onToken={handleGoogleToken} onUnavailable={toast.error}>
                                                     <svg className="w-5 h-5" viewBox="0 0 24 24">
                                                         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                                                         <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
                                                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                                                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                                                     </svg>
-                                                </Button>
+                                                </SafeGoogleLoginButton>
                                             </div>
                                         </div>
                                     </TabsContent>

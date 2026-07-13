@@ -305,12 +305,7 @@
 //   return (
 //     <HelmetProvider>
 //       <QueryClientProvider client={queryClient}>
-//         <GoogleOAuthProvider
-//           clientId={
-//             import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-//             "dummy_client_id_please_configure"
-//           }
-//         >
+//         <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
 //           <AuthProvider>
 //             <SocketProvider>
 //               <BrowserRouter>
@@ -926,6 +921,7 @@ import { ThemeProvider } from "./components/theme-provider";
 import BackButtonListener from "./components/BackButtonListener";
 import UserActivityTracker from "./components/common/UserActivityTracker";
 import ReferralTracker from "./components/common/ReferralTracker";
+import { GOOGLE_PROVIDER_CLIENT_ID } from "./utils/googleAuth";
 
 // Lazy Pages
 const Index = React.lazy(() => import("./pages/Index"));
@@ -1219,10 +1215,7 @@ const App = () => {
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <GoogleOAuthProvider
-          clientId={
-            import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-            "dummy_client_id_please_configure"
-          }
+          clientId={GOOGLE_PROVIDER_CLIENT_ID}
         >
           <AuthProvider>
             <SocketProvider>
