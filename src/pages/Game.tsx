@@ -11,7 +11,7 @@ const Game = () => {
             />
             <div className="w-full h-[calc(100vh-80px)] overflow-hidden bg-black flex flex-col items-center justify-center relative">
                 <iframe
-                    src="https://naman-kheel.vercel.app/"
+                    src={import.meta.env.VITE_GAME_URL || ""}
                     className="w-full h-full border-0 absolute inset-0"
                     title="Naman Khel"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"

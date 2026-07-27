@@ -1,9 +1,4 @@
-const DEFAULT_DEV_API_BASE_URL = "http://localhost:5001";
-const DEFAULT_PROD_API_BASE_URL = "https://namandarshan-astrotalk-testing-backend.onrender.com";
-const LEGACY_PROD_API_BASE_URL = "http://52.66.103.126:5001";
-
 const trimTrailingSlash = (value: string) => value.replace(/\/$/, "");
-
 const isAbsoluteUrl = (value: string) => /^https?:\/\//i.test(value);
 
 export const getApiBaseUrl = () => {
@@ -11,21 +6,11 @@ export const getApiBaseUrl = () => {
     const isProd = !import.meta.env.DEV;
     const envBaseUrl = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL)?.trim();
 
-    // 1. Production Mode - Strict Domain Fallbacks
-    if (isProd) {
-        // Priority: Environment Variable > Sacred Production Domain
-        if (envBaseUrl && isAbsoluteUrl(envBaseUrl)) {
-            return trimTrailingSlash(envBaseUrl);
-        }
-        
-        // If we are on Amplify or the main domain, return the official backend
-        return DEFAULT_PROD_API_BASE_URL;
+    if (envBaseUrl) {
+        return trimTrailingSlash(envBaseUrl);
     }
-
-    // 2. Development Mode (Localhost)
-    const devUrl = trimTrailingSlash(envBaseUrl || DEFAULT_DEV_API_BASE_URL);
-    // const devUrl = "https://namandarshan-astrotalk-testing-backend.onrender.com";
-    return devUrl;
+    
+    return ""; // Fallback to empty if not provided in env
 };
 
 /**

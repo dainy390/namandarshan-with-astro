@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-const uri = "mongodb+srv://keshukumar:keshukumar@cluster0.zllz6.mongodb.net/WhatsappNamandarshan?retryWrites=true&w=majority&appName=Cluster0";
+const uri = process.env.WHATSAPP_MONGODB_URI;
 
 async function check() {
     try {
