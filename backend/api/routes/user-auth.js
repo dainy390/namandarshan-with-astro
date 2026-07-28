@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
@@ -120,7 +121,8 @@ router.post('/signup', async (req, res) => {
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
     const name = req.body.name;
-    const role = normalizeRole(req.body.role);
+    // Public sign-up is devotee-only; pandit/astrologer accounts are created by admins only.
+    const role = "user";
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
