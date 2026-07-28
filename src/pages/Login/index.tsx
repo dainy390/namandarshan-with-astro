@@ -100,7 +100,8 @@ const Login = () => {
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
-        const res = await signupUser(email, password, name, accountRole);
+        // Public sign-up is devotee-only; pandit accounts are created by admins only.
+        const res = await signupUser(email, password, name, "user");
         if (res.success) {
             toast.success("Account created successfully!");
             handleSuccessfulAuth(accountRole);
@@ -360,15 +361,9 @@ const Login = () => {
                                     </TabsContent>
 
                                     <TabsContent value="signup">
-                                        <div className="mb-4 grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                                            <Button type="button" variant={accountRole === "user" ? "default" : "ghost"} className="w-full" onClick={() => handleAccountRoleChange("user")}>Devotee</Button>
-                                            <Button type="button" variant={accountRole === "pandit" ? "default" : "ghost"} className="w-full" onClick={() => handleAccountRoleChange("pandit")}>Pandit</Button>
+                                        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                                            <Button type="button" variant="default" className="w-full pointer-events-none">Devotee</Button>
                                         </div>
-                                        {accountRole === "pandit" && (
-                                            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                                                Pandit accounts are routed to your dashboard after registration.
-                                            </div>
-                                        )}
                                         <form onSubmit={handleSignup} className="space-y-4">
                                             <div className="space-y-2">
                                                 <Label htmlFor="name">Full Name</Label>
